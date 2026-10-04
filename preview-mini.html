@@ -416,6 +416,39 @@
   if (hash === 'off') activate(null);          /* #off = 宿主基线，用来对照皮肤是否改变布局尺寸 */
   else if (hash) activate(hash);
   else activate('skin-win11-dark');
+  /* ---- 背景图探针（build_background.py 生成物）-------------------------------
+     theme.css 里写了 url(...) 不等于浏览器真的解码出了图（可能被截断 / 被 CSP 拦 /
+     根本不是合法图片）。所以这里另起一个 Image() 真去解码，把 naturalWidth 记下来
+     给审计断言用。
+     data URI 的 base64 字母表里没有 '(' 和 ')'，所以 url( / linear-gradient( 的
+     计数不可能被 data URI 内容污染，可以放心按出现次数数层数。 */
+  var bgProbe = { sel: '', photo: 0, grad: 0, radial: 0, layers: 0, token: 0, urlLen: 0,
+                  loaded: null, w: 0, h: 0, size: '', pos: '', repeat: '', scrim: '', base: '' };
+  (function () {
+    var n = document.querySelector('.acrylic-container') || document.querySelector('.mini-drawer-root');
+    if (!n) { return; }
+    bgProbe.sel = (n.className || n.tagName).toString().split(' ')[0];
+    var cs = getComputedStyle(n);
+    var bi = cs.backgroundImage || '';
+    bgProbe.photo = (bi.match(/url\(/g) || []).length;
+    bgProbe.grad = (bi.match(/linear-gradient\(/g) || []).length;
+    bgProbe.radial = (bi.match(/radial-gradient\(/g) || []).length;
+    bgProbe.layers = bgProbe.photo + bgProbe.grad + bgProbe.radial;
+    bgProbe.token = (cs.getPropertyValue('--bgimg-photo') || '').trim() ? 1 : 0;
+    bgProbe.scrim = (cs.getPropertyValue('--bgimg-scrim') || '').trim();
+    bgProbe.base = (cs.getPropertyValue('--bgimg-base') || '').trim();
+    var part = function (s, i) { var p = String(s || '').split(','); return (p[i] || '').trim(); };
+    bgProbe.size = part(cs.backgroundSize, 1);
+    bgProbe.pos = part(cs.backgroundPosition, 1);
+    bgProbe.repeat = part(cs.backgroundRepeat, 1);
+    var m = bi.match(/url\(["']?(data:[^"')]+)["']?\)/);
+    if (!m) { bgProbe.loaded = 'n/a'; return; }
+    bgProbe.urlLen = m[1].length;
+    var im = new Image();
+    im.onload = function () { bgProbe.loaded = true; bgProbe.w = im.naturalWidth; bgProbe.h = im.naturalHeight; };
+    im.onerror = function () { bgProbe.loaded = false; };
+    im.src = m[1];
+  })();
 
   if (q.get('audit') !== '1') return;
 
@@ -680,6 +713,19 @@
     L.push('content.size     = ' + box('.mini-drawer-content'));
     L.push('scrollHeight     = ' + (el('.mini-drawer-root') ? el('.mini-drawer-root').scrollHeight : 'MISSING'));
 
+    L.push('bg.probe.sel     = ' + bgProbe.sel);
+    L.push('bg.layers        = ' + bgProbe.layers + ' (photo ' + bgProbe.photo + ' + linear ' + bgProbe.grad + ' + radial ' + bgProbe.radial + ')');
+    L.push('bg.photo.count   = ' + bgProbe.photo);
+    L.push('bg.grad.count    = ' + bgProbe.grad);
+    L.push('bg.token.photo   = ' + (bgProbe.token ? 'yes' : 'no'));
+    L.push('bg.image.loaded  = ' + (bgProbe.loaded === true
+      ? ('true ' + bgProbe.w + 'x' + bgProbe.h + ' dataURI ' + bgProbe.urlLen + 'B')
+      : String(bgProbe.loaded)));
+    L.push('bg.layer2.size   = ' + bgProbe.size);
+    L.push('bg.layer2.pos    = ' + bgProbe.pos);
+    L.push('bg.layer2.repeat = ' + bgProbe.repeat);
+    L.push('bg.scrim         = ' + bgProbe.scrim);
+    L.push('bg.base          = ' + bgProbe.base);
     var pre = document.getElementById('pv-audit');
     pre.hidden = false;
     pre.textContent = 'AT_AUDIT_BEGIN\n' + L.join('\n') + '\nAT_AUDIT_END';

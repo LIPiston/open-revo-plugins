@@ -552,15 +552,29 @@ def over(fg, bg):
     return tuple(int(round(fg[i] * a + bg[i] * (1 - a))) for i in range(3)) + (255,)
 
 
-def make_preview(v: dict, path: str) -> None:
+def make_preview(v: dict, path: str, photo=None) -> None:
+    """photo：与画布同尺寸（W*S × H*S）的 RGB 图（背景图 + 遮罩，已烘好）。
+
+    给定时改成「照片打底 + 半透明 UI 层合成」，缩略图与实际皮肤一致；
+    不给定时逐像素等同历史输出 —— 四套既有 preview.png 不受影响。
+    """
     from PIL import Image, ImageDraw, ImageFont
 
     W, H, S = 640, 360, 2  # S = 超采样倍率
-    img = Image.new("RGB", (W * S, H * S), (24, 24, 24))
+    photo_mode = photo is not None
+    img = Image.new("RGBA" if photo_mode else "RGB", (W * S, H * S),
+                    (0, 0, 0, 0) if photo_mode else (24, 24, 24))
     d = ImageDraw.Draw(img)
 
     def C(value, bg=(24, 24, 24)):
+        if photo_mode:
+            return parse_color(value)          # 保留 alpha，交由末尾合成
         return over(parse_color(value), bg + (255,)) if len(bg) == 3 else over(parse_color(value), bg)
+
+    def CT(value):
+        """标题栏用的实色三元组；photo 模式保留 alpha。"""
+        r = C(value, bg[:3])
+        return r if photo_mode else r[:3]
 
     bg = C(v["bg"])
     surface = C(v["surface"], bg[:3])
@@ -574,12 +588,13 @@ def make_preview(v: dict, path: str) -> None:
     def rr(box, r, fill=None, outline=None, width=1):
         d.rounded_rectangle([c * S for c in box], radius=r * S, fill=fill, outline=outline, width=width * S)
 
-    d.rectangle([0, 0, W * S, H * S], fill=bg)
+    if not photo_mode:
+        d.rectangle([0, 0, W * S, H * S], fill=bg)
     # 主窗口
     rr((16, 14, W - 16, H - 14), 6, fill=surface, outline=stroke, width=1)
     # 标题栏
     title_h = 34
-    d.rounded_rectangle([16 * S, 14 * S, (W - 16) * S, (14 + title_h) * S], radius=6 * S, fill=C(v["titlebar"], bg[:3])[:3])
+    d.rounded_rectangle([16 * S, 14 * S, (W - 16) * S, (14 + title_h) * S], radius=6 * S, fill=CT(v["titlebar"]))
     d.line([(16 * S, (14 + title_h) * S), ((W - 16) * S, (14 + title_h) * S)], fill=stroke, width=S)
     # 品牌徽标
     rr((26, 14 + 8, 26 + 18, 14 + 26), 4, fill=accent)
@@ -652,7 +667,11 @@ def make_preview(v: dict, path: str) -> None:
     d.text((32 * S, (sy + 26) * S), "plugin_type: skin   theme_css: theme.css   " +
            ("resizable" if True else ""), font=font_small, fill=text3)
 
-    img = img.resize((W, H), Image.LANCZOS)
+    if photo_mode:
+        # PIL 的 ImageDraw 是「直接写像素」而非 alpha 混合：UI 层必须画在独立透明
+        # 画布上，最后一步再与照片合成，否则半透明填充会把照片整块替换掉。
+        img = Image.alpha_composite(photo.convert("RGBA"), img)
+    img = img.convert("RGB").resize((W, H), Image.LANCZOS)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     img.save(path, "PNG")
 

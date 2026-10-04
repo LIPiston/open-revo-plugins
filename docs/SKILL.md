@@ -122,6 +122,12 @@ powershell -NoProfile -Command "Start-Process powershell -Verb RunAs -WindowStyl
       `ready.dot` / `themeBtn.cyber` / `oem.blocked` / `sponsorHeart` = accent、`oem.running` = important
 - [ ] **以上全部由 `bash _tools/verify.sh` 断言**（主窗 + 迷你各四套，共 132 条）；动过预览页或皮肤 CSS 后，
       另跑 `PAGES=preview-mini.html:mini bash _tools/_stress.sh 48 8` 确认「异常 0 次」（偶发竞态只有它能抓）
+- [ ] **自定义背景（可选功能）**：`bash _tools/verify-bg.sh` 全绿 —— 它**第一条就是**「既有 132 条无回归」；
+      默认口径只出**独立插件** `bg-custom`（17 条）；只有显式 `--targets` 时才校验派生皮肤
+      `<id>-bg\theme.css` 与原皮肤**逐行相同**（只允许 id 替换与标题多出的「· 自定义背景」）、
+      末尾恰好 **3 条**背景规则；浏览器**真解码**出图（`bg.image.loaded = true <W>x<H> dataURI <N>B`，
+      尺寸须与 PIL 读出的产物一致）；停用后 `bash _tools/verify-bg.sh off` 须报零泄漏
+      （`bg.token.photo = no`、`bg.photo.count = 0`、产物目录已删）。细节见 `reference/background-plugin.md`
 - [ ] 预览页注入皮肤后，没有元素停在 `buttonface rgb(240,240,240)`
 - [ ] 真机主窗：列边缘在 CSS **224.7 / 225.3** 处最强（侧栏生效）、宿主调色板 `(11,13,17)/(16,18,25)/(26,28,35)…` **计数为 0**
 - [ ] 真机迷你面板：宿主色 ≈ 0、`(32,32,32)`/`(44,44,44)` 占比与预览一致（分块 MAE ≈ 20 以内）
@@ -140,6 +146,7 @@ docs\
     ├── plugin-manual-digest.md            # 手册消化件 + 「手册 ≠ 发行版」对照表
     ├── host-truth-extraction.md           # 从 exe 抽宿主 CSS/JS、DOM 结构、宿主令牌与对手规则
     ├── skin-authoring.md                  # manifest/目录规范、令牌架构、特异性阶梯、双面板改造配方
+    ├── background-plugin.md               # 自定义背景图独立插件：data URI、遮罩同层、单 CSS 通道约束、背景验收
     ├── preview-and-audit.md               # 预览页能力、无头 Chrome 命令、审计与像素判据
     ├── real-machine-verification.md       # 真机流程：提权重启/唤醒/置顶抓图/度量（含实测基线数字）
     ├── environment-and-tools.md           # 环境硬事实 + 34 个工具地图 + 证据索引 + 回退清单
@@ -155,6 +162,17 @@ docs\
 * **配色已收敛为二色体系**：迷你面板色相族 6 → 2，主控台 2 族（accent + 状态点绿）。
   验收 = `bash _tools/verify.sh` **132 条断言全绿**（`exit 0` 才算过）；曾有的偶发竞态（并发下 ≈17%）
   已由 `preview-mini.html` 的 `settleStyle()` 收口，`settle.remounts = 1` 是正向证据之一。
+* **自定义背景已交付**（2026-10-04 续，**独立插件** `bg-custom`，与 win skin 无耦合）：宿主本身没有任何背景图能力
+  （exe 里 `background_image|backgroundImage|wallpaper|bg_image` 命中 0、config 无此键），背景只能由
+  插件注入的 `theme.css` 承载。宿主全树只有一处 CSS 注入点（`<style id="openrevo-custom-skin">` ←
+  `load_plugin_theme_css`），而 `active_skin` 是**单值**、非 skin 插件走 `set_custom_plugin_enabled` 永不注入
+  CSS ⇒ **背景插件与 Fluent 皮肤在宿主层面互斥** —— 这是宿主的设计，不是本插件的取舍。图片内联 base64
+  `data:` URI、遮罩与照片同层叠（层数恒为 2）。默认产物 = `bg-custom`（宿主默认 UI 专用，17 条断言）；
+  `<id>-bg` 派生皮肤（皮肤 + 背景同份 theme.css）降级为 `--targets` 显式开启的可选导出。
+  验收 = `bash _tools/verify-bg.sh`（默认 18 / 派生 68 / off 10~18 条，按配置推导）；配置真值 = `bg.config.json`，
+  命令行 = `build_background.py`；细节见 `reference/background-plugin.md`。
+  **⚠️ 按用户口径 m00785「既然已知不行那就先不做」，它刻意没装进宿主、也没激活**（宿主侧零改动，
+  `active_skin` 仍是 `skin-win11-dark`）；等 OpenRevo 开放接口，需要的接口见根 `README.md` §11.4。
 * 真机取证的重要结论：**截图不能判别「换肤是否生效」** —— 改名前后 `theme.css` 逐字节同源，像素必然一样；
   招牌色也不能当正控（精确命中 0 px）。详见 `reference/real-machine-verification.md` §9。
 * 已知残留（不影响「侧栏 + 不透明」两条结论）：迷你面板底部有一条细横向滚动条（宿主自身内容 **410×621** CSS > 窗口 610，

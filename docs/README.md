@@ -18,6 +18,7 @@ docs\
     ├── plugin-manual-digest.md           # 手册消化件 + 「手册 ≠ 发行版」对照表
     ├── host-truth-extraction.md          # 从 exe 抽宿主 CSS/JS；宿主 DOM/令牌/!important 对手规则
     ├── skin-authoring.md                 # manifest/目录、令牌与镜像架构、特异性阶梯、双面板配方
+    ├── background-plugin.md              # 自定义背景图独立插件：data URI、遮罩同层、单 CSS 通道互斥、背景验收
     ├── preview-and-audit.md              # 预览页能力与 URL 参数、无头 Chrome 命令、像素判据
     ├── real-machine-verification.md      # 提权重启/唤醒/置顶抓图/度量与实测基线
     ├── environment-and-tools.md          # 环境硬事实 + 工具地图 + 证据索引 + 回退清单
@@ -48,6 +49,15 @@ docs\
   的 `dom.hueFamilies = 2` 与 `census.py` 的色族数 = 2，并额外核对正向条件 —— **只看族数 = 2 会骗人**：
   坏读数里全是宿主原色时，族数也恰好是 2（`pitfalls.md` #35 / #39）。动过预览页或皮肤 CSS 后，另跑
   `PAGES=preview-mini.html:mini bash _tools\_stress.sh 48 8`，须报「异常 0 次」。
+* **背景插件是独立的一条链**：真值在 `bg.config.json`，模板在 `src\background.css`，改完跑
+  `python build_background.py build`（重新编码图片）再跑 `bash _tools\verify-bg.sh` —— 它第一条就是
+  「既有 132 条无回归」，所以背景链不会绕过皮肤验收。产物 `bg-custom\`（默认）与 `<id>-bg\`（显式
+  `--targets` 才有）**入库即装即用**，与四套 `skin-*\` 同等对待；`assets\sample-wallpaper.jpg` 是
+  确定性源图，保证任何 clone 都能构建出同一份产物。宿主只有一条 CSS 注入通道、`active_skin` 单值，
+  所以「背景插件」与「Fluent 皮肤」在宿主层面互斥 —— 详见 `reference\background-plugin.md` §0。
+  **按用户口径 m00785，这部分功能「先不做」**：代码与验收都在，但**刻意不装进宿主、不激活**
+  （宿主侧零改动，`active_skin` 仍是 `skin-win11-dark`），等 OpenRevo 开放接口；需要什么接口见
+  `README.md` §11.4 的三选一表，现状说明见 `reference\background-plugin.md` §0.2。
 * **本目录只在权威树 `D:\LIPis\Documents\code\openrevo-plugins\` 维护。**
   历史上同一份内容散在两棵树里，已踩过「改了 A 树、审计了 B 树」的坑；
   harness 工作区那棵 `…\default-workspace\openrevo-win-skin\` 是 2026-10-04 改名前的快照，**已作废，不要再同步**。

@@ -2,3 +2,11 @@
 _audit/
 __pycache__/
 *.pyc
+
+# 派生背景皮肤 <id>-bg\：由 `build_background.py set --targets <id>` 从
+# 「已入库的原皮肤 + 已入库的 bg.config.json」**完全重新推导**出来，默认口径不生成。
+# 它是本机试验产物，不入库；真要用可以 `git add -f`。
+*-bg/
+
+# 注意：bg-custom\ **要**入库（与四套 skin-*\ 同等对待）。
+# 它同样可复现，但它是这个功能的默认交付物 —— 入库才能 `git clone` 后即装即用。

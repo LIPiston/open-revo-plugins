@@ -12,6 +12,7 @@
 | m00236 | 「能够大面积修改成类似 `D:\LIPis\desktop\openrevo ui` 这里的效果吗 —— **传统 WinUI3 那样的侧栏切换 tab，然后取消掉半透明背景**」 |
 | m00705 | 「**mini模式的也要做**」——把主控台的做法延伸到迷你面板 |
 | m01586 | 「把开发记录做成一份skill放到 `D:\LIPis\Documents\code\openrevo-plugins\docs`」（= 本文件与同目录 SKILL.md 的由来） |
+| m00357 | 「这个自定义背景是个单独的插件 / 效果是用来自定义 openrevo 的背景图 / **跟 win skin 没有关联性**」→ 背景插件从「派生皮肤」改为「独立插件 `bg-custom`」为默认口径 |
 
 用户后来自己在宿主【插件】页把 `active_skin` 从 `skin-win10-dark` 切到了 **`skin-win11-dark`**。
 
@@ -145,6 +146,16 @@
 5. ~~`preview-mini.html` 里早期排查用的实验钩子（A–J）已无用，可以删掉。~~ —— **2026-10-04 已删**，
    并且发现它们一直在**污染**审计读数（`content.size` 被撑高 45px）。见 §11。
 6. 用户在宿主【插件】页对四套皮肤的观感反馈尚未收到（皮肤本身功能已验收）。
+7. **背景插件：功能已完成并验收，但按 m00785 刻意不装、不激活。**（`build_background.py status` 里
+   `bg-custom installed[--]`）产物在仓库里已就绪，`--install` 会把它同步到 `%APPDATA%\OpenRevo\plugins\`，
+   但要**重启宿主**才认（宿主只在启动时枚举插件目录）。用户 2026-10-04 的决定是
+   **「既然已知不行那就先不做，然后更新文档，等待开发者开放更多接口」**，所以宿主侧保持零改动、
+   `active_skin` 仍是 `skin-win11-dark`。见 `reference/background-plugin.md` §0.2 / §7。
+8. **背景插件与 Fluent 皮肤在宿主层面互斥**（宿主只有一条 CSS 注入通道、`active_skin` 单值）——
+   这是宿主设计，本插件无法绕过；要同时生效只能用派生的 `<id>-bg` 皮肤。已在 `README.md` §11.3/§11.4 与
+   参考文档 §0 明确写出。**这不是待用户拍板的取舍题，而是待宿主开放的接口缺口**：需要的接口已在
+   `README.md` §11.4 列成三选一（第二条 CSS 注入通道 / `active_skin` 分槽多值 / 原生背景图配置键）。
+   三者任一落地即可解除阻塞，届时仓库侧不需改动，重新构建 + `install --activate` + 重启即可。
 
 ## 9. 宿主自动更新复核（开发中途真实发生）
 
@@ -327,3 +338,89 @@ clone 节点、重新挂载节点、反复触碰 class……用来定位「`.m-b
 * **顺手更正一条旧结论**：`_tools/pin-grab.ps1` 的 `Say()` **是已定义的**（第 8 行 `function Say($m){...}`），
   旧接手文档说它「未定义」是陈旧结论 —— 它当初无效的真实原因另有其人（`show-app.ps1` 只 show 不置顶、
   `capwin.ps1` 对 Tauri 返回全 alpha=0）。
+
+## 13. 自定义背景图插件（2026-10-04 第四轮，用户口径 m00001 → m00357 → m00785）
+
+新增一个与四套皮肤**并列**的功能：把用户自己的一张图铺成窗口背景。详见 `reference/background-plugin.md`。
+
+> **收尾口径（m00785）**：本轮结束时用户拍板「既然已知不行那就先不做，然后更新文档，
+> 等待开发者开放更多接口」。所以本节记录的是**已实现、已验收、但刻意未安装**的状态：
+> 宿主 `plugins\` 里没有 `bg-custom`，`active_skin` 保持 `skin-win11-dark`，宿主侧零改动。
+> 卡点不是代码而是宿主只给一条 CSS 通道（§13.2 的互斥结论），需要的接口列在 `README.md` §11.4。
+
+### 13.1 先证伪「宿主本来就有背景能力」
+
+* 在 `open-revo.exe` 里检索 `background_image` / `backgroundImage` / `wallpaper` / `bg_image` → **命中 0**；
+  宿主 `config.json` 里也没有任何相关键 ⇒ 背景必须由插件注入的 `theme.css` 承载。
+* `theme.css` 必须是**单文件自包含**：宿主把整份文本塞进 `<style id="openrevo-custom-skin">`，
+  `@import` 与相对 `url()` 都按 `tauri://` 解析、够不到插件目录；`file://` 又被 WebView2 拒。
+  ⇒ 图片只能内联成 base64 `data:` URI（2560×1440 q88 → 136,339 B，占 theme.css 的 95%）。
+
+### 13.2 架构：先做派生皮肤，再按用户口径退回独立插件
+
+* 第一版做的是**派生皮肤** `<id>-bg`（= 原皮肤 tokens + `src/base.css` + 追加背景段），因为它能
+  「皮肤和背景同时生效」，且原四套皮肤与既有的 **132 条断言一个字都不用改**（`verify-bg.sh` 第一条就是
+  「既有 132 条无回归」）。
+* 用户 m00357 明确定调「**跟 win skin 没有关联性**，是个单独的插件」⇒ 默认口径改为只出独立插件
+  `bg-custom`，派生皮肤降级为 `--targets` 显式开启的可选导出（代码与 50 条断言都保留）。
+* 但取证发现一条**宿主硬约束**，必须如实告知而不是绕开：宿主全树只有**一处** CSS 注入点
+  （`<style id="openrevo-custom-skin">` ← `load_plugin_theme_css`），且插件页切皮肤时对 `plugin_type==="skin"`
+  走 `set_active_skin` + **单选**（`enabled: T.id===D`），非 skin 插件走 `set_custom_plugin_enabled`
+  **永不注入 CSS**。⇒ 背景插件只能做成 `skin` 形态，于是必然占用唯一的 `active_skin` 槽位 ——
+  **「背景插件」与「Fluent 皮肤」在宿主层面互斥，这是宿主设计，不是本插件的取舍**。
+  「皮肤 + 背景」要同时生效只剩一条路：把两层 CSS 合并进同一份 `theme.css`（即 `<id>-bg`）。
+
+### 13.3 画法与对手规则
+
+* 画在面板根（`.acrylic-container` / `.mini-drawer-root`），**类名写两遍**抬到 (0,3,0)：
+  `.acrylic-container.acrylic-container`，压过 base.css 的 (0,2,0)+`!important` 与宿主对
+  `.mini-drawer-root` 的内联 `background:rgba(12,15,22,.96)`。
+* 遮罩（scrim）与照片写在**同一个** `background-image` 里（第 0 层 scrim、第 1 层照片），
+  不需要伪元素/z-index；图片解码失败时颜色自动回落到 `background-color`（= `--bgimg-base`）。
+* 只用**长手属性**（`background-color/-image/-size/-position/-repeat/-attachment`），不写 `background:` 简写。
+  **纠错记录**：早先注释声称「简写会把 base.css 的 border/box-shadow 一起清掉」是**错的**（简写只重置
+  background 族）；正确理由是它会抹掉同规则里刚写的 `background-image`，且表达不了逐层 size/position/repeat。
+* 令牌前缀用 `--bgimg-*` 而不是 `--wf-bg-*`/`--bg-*`：前者看起来像与皮肤耦合，后者与宿主已占用的
+  `--bg-acrylic / --bg-card / --bg-glass-pill` 有撞名风险。
+
+### 13.4 验收：把「背景生效」变成可执行断言
+
+* 关键教训：**层数 = 2 不能证明照片生效**。4 套原皮肤 `.acrylic-container` 的 computed `backgroundImage`
+  本来就是 `none`，而 base.css 那条 mica 规则是两层 `radial-gradient`。必须分开断言
+  `bg.photo.count = 1` + `bg.grad.count = 1` + `bg.image.loaded = true <W>x<H> dataURI <N>B`
+  —— 后者由预览页**真起一个 `new Image()` 解码**，尺寸再与 PIL 读出的产物比对。
+* `preview.html` / `preview-mini.html` 各加一段只读探针（`bg.*` 共 11 个字段），不改 DOM、不影响
+  `dom.hueFamilies`（该检查过滤低色度且忽略 `background-image`）。
+* `_tools/verify-bg.sh` 三档：默认 **18 条**（1 条「既有 132 全绿」+ bg-custom 17 条）、
+  `--targets skin-win11-dark` 时 **68 条**（多出派生皮肤的逐行同源比对 + 规则数 `118+1+extra` 钉死）、
+  `off` 模式**随配置推导**：默认口径（只有 `bg-custom` 要消失）**10 条** = 1 条无回归 + 1 条 `enabled=false`
+  + 1 个产物 × 8 条；若之前在 `--targets skin-win11-dark` 下跑过（两个产物要消失）则是 **18 条**。
+  断言内容是「推导出的必须消失 id 列表」逐个查零泄漏 + 回落皮肤没有背景图。
+  期望值全部从 `bg.config.json` **重新推导**，不抄产物。
+  踩坑三条：规则数要**先剥注释再数 `{`**（模板头部注释引用了宿主规则原文）；失败信息在 Git Bash 下会
+  按 `gbk` 输出中文乱码（脚本 `export PYTHONIOENCODING=utf-8`，CLI 自身也把 stdout/stderr 重包成 UTF-8）；
+  off 模式原先只遍历被 targets 选中的变体 ⇒ `--targets none` 时一条断言都不跑，已改成推导清单。
+* 三条路径实测全绿（EXIT=0）：默认 18/18、派生 68/68、off 10/10（默认口径下）；
+  `off → set` 重建后 `bg-custom/theme.css` 等三个 sha1 **逐字节一致** ＝ 可复现
+  （`4bfce11388ac…` / `1ec667e34c30…` / `347917dc26f4…`）。
+* 顺带的测量能力扩展：`build_skins.py:make_preview(v, path, photo=None)` **纯增量**加了 photo 参数，
+  并把 UI 画在 RGBA 透明层上再 `alpha_composite` —— 因为 PIL `ImageDraw` 是**直接写像素**、不做 alpha 混合，
+  否则半透明部件会把照片**替换**掉而不是叠上去。回归证据：重跑 `--preview` 后四张既有缩略图
+  `git status --porcelain` 为空（逐字节不变）。
+* `assets/sample-wallpaper.jpg` 由 `_tools/make-sample-wallpaper.py` 确定性生成（渐变 + 5 个光斑 +
+  两道斜纹 + 四角 L 形标记），入库 ⇒ 任何 clone 都能构建出同一产物，`verify-bg.sh` 才有意义；
+  四角标记让 fit/position 的差异可被断言看见。
+
+### 13.5 收尾决定：做完了，但先不装（m00785）
+
+* 用户拍板「**既然已知不行那就先不做，然后更新文档，等待开发者开放更多接口**」。
+  「已知不行」指的就是 §13.2 那条宿主硬约束：装上去必然顶掉 `skin-win11-dark`，而宿主又不给第二条
+  CSS 通道 —— 这是**宿主侧缺接口**，不是本插件还能再优化出来的东西。
+* 因此本轮交付的边界是：**仓库内功能完整 + 三档验收全绿**（`verify-bg.sh` 默认 18 / 派生 68 / off 10，
+  另加 `verify.sh` 132 条无回归），但**宿主侧零改动** —— `%APPDATA%\OpenRevo\plugins\` 里没有 `bg-custom`，
+  `config.json` 的 `active_skin` 仍是 `skin-win11-dark`，没有谁被顶掉。
+* 文档里把这个缺口写成了**可核对的接口需求**（根 `README.md` §11.4 三选一：第二条 CSS 注入通道 /
+  `active_skin` 分槽多值 / 原生背景图配置键），并在 `reference/background-plugin.md` §0.2、
+  `docs/README.md` 维护约定、`SKILL.md` 现状快照四处同步了「先不做」的口径，
+  以免后来者（或下一个 agent）看到 `bg-custom\` 就顺手 `install --activate`。
+* 解除阻塞后不需要改代码：`set → install --activate → 重启宿主` 即可，产物可复现性已用 sha1 钉死。

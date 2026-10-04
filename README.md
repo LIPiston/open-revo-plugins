@@ -6,6 +6,10 @@
 > **已经装好了。** 四套皮肤已安装到 `C:\Users\LIPis\AppData\Roaming\OpenRevo\plugins\`，
 > 打开 OpenRevo 主界面 → 【插件】选项卡 → 右上角【刷新】→ 拨动开关即可激活（皮肤互斥，同时只能启用一套）。
 
+另有一个**独立于皮肤**的插件 `bg-custom`：只把一张本地图片铺成窗口背景，不改配色与布局（见 **§11**）。
+它与本套 Fluent 皮肤**没有依赖关系**，但**在宿主层面互斥** —— 宿主只有一条 CSS 注入通道
+（`active_skin` 单值），所以「皮肤 + 背景」要同时生效只能给皮肤派生一个 `<id>-bg`，见 §11.3。
+
 ---
 
 ## 1. 四套皮肤
@@ -145,6 +149,15 @@ openrevo-plugins\                # ← 项目根（2026-10-04 由 openrevo-win-s
 ├── skin-win11-dark\         …（同上）
 ├── skin-win10-light\        …（同上）
 ├── skin-win10-dark\         …（同上）
+├── bg-custom\               # ★ 独立背景插件（可选）：只铺背景，与上面四套皮肤无依赖
+│   ├── manifest.json        #   plugin_type:"skin"（宿主唯一能注入 CSS 的插件形态）
+│   ├── theme.css            #   139 KB = 3 条背景规则 + 内联 base64 图片
+│   └── assets\              #   background.jpg（成品）+ preview.png（卡片缩略图）
+├── bg.config.json           # ★ 背景构建真值：源图路径 + fit/position/overlay/blur/scope/targets
+├── bg_common.py             # ★ 背景共享层：配置、颜色、PIL 编码、CSS 渲染
+├── build_background.py      # ★ 背景 CLI：set / off / build / install / status
+├── src\background.css       # ★ 背景段模板（__BG_*__ 占位符 + scope 裁剪标记）
+├── assets\sample-wallpaper.jpg  # ★ 确定性示例图（任何 clone 都能 build 出同一产物）
 ├── src\base.css            # 结构层：全部组件规则，用 __SKIN_ID__ 占位符标记皮肤命名空间（13 节 + 第 14 节 WinUI3 侧栏重排）
 ├── build_skins.py          # 生成器：令牌表 + base.css → 上面那四个 skin-*\ 子目录
 ├── preview.html            # 本地预览页（加载宿主真实 CSS，见 §3）
@@ -179,6 +192,12 @@ PAGE=preview-mini.html bash _tools/audit.sh   # 迷你面板四套变体的审�
 PAGES=preview-mini.html:mini bash _tools/_stress.sh 48 8   # 回归压测：改过预览页/皮肤 CSS 后跑，须「异常 0 次」
 bash _tools/shots.sh              # 重出全部截图（含 <id>-clean.png）
 python _tools/census.py _shots/mini-skin-win11-dark.png   # 像素级色相族普查
+
+python build_background.py set --image D:\wallpaper.jpg   # 设自定义背景（只出独立插件 bg-custom）
+python build_background.py status                         # 看当前背景配置与产物状态
+python build_background.py off                            # 停用并删除背景产物
+bash _tools/verify-bg.sh                                  # 背景验收（第一条就是「既有 132 条无回归」）
+bash _tools/verify-bg.sh off                              # 停用后的零泄漏验收
 ```
 
 **新增一套皮肤**：在 `build_skins.py` 的 `VARIANTS` 列表里加一个 dict（`id / name / desc / window_size / font / on_accent / radius…`
@@ -300,6 +319,11 @@ python _tools/census.py _shots/mini-skin-win11-dark.png   # 像素级色相族�
      → **§14 的 WinUI3 左侧栏 tab 重排在真机上确实生效**。
    * 剩余差异集中在顶部 ~100 CSS px（真机首段行亮度 60.7 vs 预览 95.8）与内容区：抓图时宿主停在**别的 tab 页**
      （内容区本身是可滚动区，预览固定渲染 overview 页），不影响「侧栏 + 不透明」两条结论。
+10. **背景插件**（独立验收链，见 §11.1；当前**未装进宿主**）：`bash _tools/verify-bg.sh` 三档全绿 ——
+    默认只出独立插件时 **18 条**、`--targets skin-win11-dark` 时 **68 条**、`off` 时 **10 条**（均 0 失败、`exit 0`）。
+    「背景真的生效」不靠层数，而是 `bg.photo.count = 1` + `bg.grad.count = 1` +
+    `bg.image.loaded = true 2560x1440 dataURI 136339B`（预览页真起 `new Image()` 解码后与 PIL 读出的产物比对）；
+    产物可复现：`off → set` 后 `bg-custom/theme.css` 等三个 sha1 逐字节一致。
 
 > **踩过的坑（写给以后改这套东西的人）**
 > * 被 `disabled` 的 `<link>` 在 `disabled = false` 之后是**异步**取回样式表的，取样必须等到 `window.load` 之后，否则读到的是未上皮肤的样式。
@@ -356,3 +380,104 @@ python _tools/census.py _shots/mini-skin-win11-dark.png   # 像素级色相族�
 * 历史上为拿调试端口试过的 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9333`
   这条路**已被证伪**（Tauri/wry 会覆盖 WebView2 的启动参数，端口不会打开），该 `HKCU\Environment` 变量**已删除**；
   同理 `_tools\cdp.py`、`_tools\relaunch-debug.ps1`、`_tools\scan_ebwebview.py` 只是留档，不再是工作路径。
+* **背景插件：功能已做完并验收，但按 m00785「既然已知不行那就先不做」，刻意不装、不激活。**
+  `bg-custom\` 在仓库里已构建好、随时可用，卡点不是代码而是**宿主只给了一条 CSS 通道**：
+  启用背景插件必然顶掉你当前的 `skin-win11-dark`（原因见 §11.3），这是宿主侧的设计限制，
+  本插件绕不过去。因此**保持现状**：仓库内三档验收全绿，宿主侧零改动。
+  等 OpenRevo 官方开放接口后再接着做 —— 需要的接口见 §11.4。
+  在开放之前若想先看看真实观感，可以自己手动装（**会顶掉现有皮肤**）：
+
+  ```bash
+  python build_background.py install --activate     # 换成你自己的图就加 --image D:\pics\wall.jpg
+  powershell -ExecutionPolicy Bypass -File _tools\kill-and-start.ps1
+  ```
+
+  退回现在的皮肤：`python build_background.py off --uninstall` 再重启。
+
+## 11. 自定义背景图（可选功能，独立于皮肤）
+
+把一个本地图片文件铺成窗口背景。**它跟上面四套皮肤没有依赖关系**，就是一个单独的插件。
+
+> **当前状态：已实现、已验收，但按 m00785「既然已知不行那就先不做」而没有装进宿主** ——
+> 卡点是宿主的单 CSS 通道（§11.3），不是代码。下面写的命令全部可用，只是默认不执行 §11.2 的安装那步；
+> 需要的宿主接口见 §11.4。
+
+```bash
+python build_background.py set --image D:\pics\wall.jpg      # 指定图片并构建（默认只出 bg-custom）
+python build_background.py set --image wall.jpg --fit cover --position center --overlay 0.42
+python build_background.py set --image wall.jpg --blur 12 --scope mini   # 只糊迷你面板
+python build_background.py install --activate                # 同步到 plugins\ 并切 active_skin（⚠️ 会顶掉现有皮肤，见 §11.4）
+python build_background.py status                            # 看配置 / 产物 sha1 / 装没装
+python build_background.py off                               # 停用并删除产物
+```
+
+| 参数 | 默认 | 说明 |
+|---|---|---|
+| `--fit` | `cover` | `cover` / `contain` / `stretch` / `tile` / `center` |
+| `--position` | `center` | 任意 `background-position`（`top`、`50% 20%`…） |
+| `--overlay` | `0.42` | 遮罩不透明度；`0` = 不压暗（那一层仍在，见下） |
+| `--overlay-color` | `auto` | `auto` = 按底色亮度自动选黑/白 |
+| `--blur` | `0` | 高斯模糊半径（**烘进图片**，不是运行期 `backdrop-filter`） |
+| `--max-width` | `2560` | 超过则 LANCZOS 降采样（**先降采样再模糊**，换 `max-width` 观感一致） |
+| `--scope` | `both` | `both` / `main` / `mini` |
+| `--targets` | `none` | 见 §11.3 |
+
+**为什么图片是 base64 内联的**：宿主把 `theme.css` 整份读进 `<style id="openrevo-custom-skin">`，
+`@import` 和相对 `url()` 都按宿主文档的 base URL（`tauri://`）解析、够不到插件目录，`file://` 又被 WebView2 拒。
+所以图片必须编码成 `data:` URI —— 2560×1440 的 q88 JPEG 约 133 KB，`bg-custom\theme.css` 因此有 139 KB。
+配置里**只存源图路径**，每次构建重新编码，换参数不会退化成二次压缩。
+
+**画在哪**：面板根（主窗 `.acrylic-container`、迷你 `.mini-drawer-root`），选择器把类名写两遍抬到 (0,3,0)，
+才压得过皮肤的 `!important` 与宿主给迷你的内联 `background`。遮罩和照片写在**同一个** `background-image` 里
+（第 0 层遮罩、第 1 层照片），所以不需要伪元素或 z-index；图片解码失败时会自动回落到 `background-color`。
+
+### 11.1 验收
+
+```bash
+bash _tools/verify-bg.sh          # 默认 18 条断言（第一条就是「既有 132 条无回归」）
+bash _tools/verify-bg.sh off      # 停用后：产物已删 + 没有背景图泄漏
+```
+
+断言不查「层数 = 2」—— 那个数字说明不了问题（4 套原皮肤的 `.acrylic-container` 底色本来就是纯色，
+而皮肤里另有一条两层 `radial-gradient` 的规则）。真正判定生效的是 `bg.photo.count = 1` +
+`bg.image.loaded = true <W>x<H>`：预览页会**真起一个 `new Image()` 解码**，再把尺寸与 PIL 读出的产物比对。
+期望值每轮都从 `bg.config.json` 重新推导，不抄产物。
+
+### 11.2 装完要重启
+
+宿主**只在启动时枚举插件目录**，所以 `--install` 之后必须重启宿主才认；重启用
+`powershell -ExecutionPolicy Bypass -File _tools\kill-and-start.ps1`（需要提权，`taskkill` 会被拒）。
+`--activate` 会调 `_tools\set-active-skin.ps1`，它按「停机 → 改 config → 启动」的顺序做，
+因为宿主运行中会周期性把 `config.json` 整份回写。
+
+### 11.3 与皮肤互斥（宿主设计，不是本插件的取舍）
+
+宿主全树只有**一条** CSS 注入通道：`<style id="openrevo-custom-skin">`，内容来自 `load_plugin_theme_css`。
+插件页切皮肤时，`plugin_type === "skin"` 的插件走 `set_active_skin` 且**单选**（同一时刻只有一套），
+而非 skin 插件走 `set_custom_plugin_enabled`、**永远不注入 CSS**。所以背景只能做成 `skin` 形态，
+于是必然占用唯一的 `active_skin` 槽位 —— **启用背景插件就会顶掉你的 Fluent 皮肤，反之亦然。**
+
+要「皮肤 + 背景」同时生效，只有把两层 CSS 合并进同一份 `theme.css`：
+
+```bash
+python build_background.py set --image wall.jpg --targets skin-win11-dark   # 产出 skin-win11-dark-bg
+```
+
+这会额外生成派生皮肤 `skin-win11-dark-bg\`（= 原皮肤逐行相同 + 末尾 3 条背景规则），
+原四套皮肤一个字节都不动。默认不生成，因为按用户口径背景插件应当与皮肤解耦。
+
+### 11.4 卡在哪：需要宿主开放什么（m00785 后暂停在这里）
+
+按上面的结论，背景插件**已经做完并三档验收全绿**，剩下的不是我们这边的活，而是宿主侧缺接口。
+当前状态是**先不装、不激活**，等开发者开放下列任一种能力即可解除互斥、恢复「皮肤照用 + 背景照铺」：
+
+| # | 需要宿主开放的能力 | 解除后能做什么 | 为什么现在做不到 |
+|---|---|---|---|
+| 1 | **第二条 CSS 注入通道**：按 `plugin_type` 分别注入，让 `skin` 之外的形态（`widget` / `shell`，或新增 `background`）也能往 `<style>` 里写样式 | 背景做成非 skin 插件，与皮肤各占一个槽位，真正同时生效 | 全树只有 `<style id="openrevo-custom-skin">` 一处注入点，且只由 `load_plugin_theme_css` 服务 `active_skin` |
+| 2 | **`active_skin` 分槽 / 多值**：允许一个「皮肤槽」+ 一个「背景槽」同时 `enabled` | 同样是共存，且不必新增插件类型 | 宿主切换逻辑写死 `enabled: T.id === D`（单选），同一时刻只认一套 `skin` 插件 |
+| 3 | **原生背景图配置键**：`config.json` 或 API 直接接受背景图（含 fit / 遮罩 / 模糊） | 背景彻底不必走 CSS，皮肤随便换 | exe 里 `background_image|backgroundImage|wallpaper|bg_image` 命中 0，config 无任何背景键 |
+
+三者取其一即可。在开放之前，本仓库里的东西都是可运行的完整实现（`--targets <skin_id>` 的派生皮肤
+就是当前的替代方案），只是**默认不装进宿主**。仓库侧不需要任何改动即可切换口径，重启宿主即可生效。
+
+细节（含探针字段、已知坑、文件清单、退回原状）见 [`docs/reference/background-plugin.md`](docs/reference/background-plugin.md)。
