@@ -1,0 +1,4 @@
+# 生成物：随时可由 _tools/verify.sh 重建，不入库
+_audit/
+__pycache__/
+*.pyc
