@@ -4,6 +4,12 @@
 > **面向对象**：OpenRevo 社区极客、二次元/机甲皮肤设计师、独立客户端重构者、AI Agent 开发者、硬件自动化极客  
 > **设计哲学**：基于微内核与能力网关，实现“按需分配运行时（Runtime on Demand）、物理沙盒隔离、可逆副作用、零污染与即插即用”。
 
+> ⚠️ **本文件是官方 v1.0 原文存档，不是行为准则 —— 动手前先读 `reference/plugin-manual-digest.md` §10「手册 ≠ 发行版」。**
+> 已知不一致（都已实测复核）：清单示例写 `"type"`，发行版认的权威键是 **`plugin_type`**；
+> 示例里的 `.overview-main-grid` / `.sensor-gauge-cluster` / `.cooling-fan-card` / `.power-mode-selector`
+> 在发行版 CSS 里**不存在**；手册的 `--core-*` / `--surface-*` / `--status-*` 令牌**不存在**（真值是 `--wf-*` 一套）；
+> 手册说「插件页点刷新即热加载」，但宿主**只在启动时枚举插件目录** —— 皮肤必须重启宿主才会生效。
+
 ---
 
 ## 目录
