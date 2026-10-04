@@ -93,7 +93,7 @@
 * 右缘解剖：CSS `x=402` 是卡片右描边，`x=402.7~406.7` 是滚动条槽，槽内 `y=0~302` 是滑块
   ⇒ 当时用「滑块占槽比例」反推 `scrollHeight ≈ 1180~1230`，同时用预览审计读到「宿主自身内容 663 高」
   ⇒ 结论：**纵向滚动是宿主固有的**（两者都 > 窗口 610）。
-  > **2026-10-04 更正**：那个 663（以及 HANDOFF 里写的 666）是**被污染的读数** —— 当时审计代码里有一段诊断实验
+  > **2026-10-04 更正**：那个 663（以及当初接手文档里写的 666）是**被污染的读数** —— 当时审计代码里有一段诊断实验
   > 会往 `.m-grid-4` 里 append 新按钮、再 clone / 重新挂载节点，把内容撑高了 45px。删掉那段诊断后，
   > 干净读数是 **410×621**（`?audit=1` 的 `content.size`）。621 仍 > 610 ⇒ 定性结论不变，但**余量只有 11px**，
   > 不再是「差 53px」那么宽裕。滑块比例反推的 1180~1230 也不可信（皮肤把滚动条改成 12px 槽 + 4px 滑块，
@@ -274,7 +274,8 @@ clone 节点、重新挂载节点、反复触碰 class……用来定位「`.m-b
   `probe.hits` 规则命中列表、`sheet[i]` 解析统计、残留白检查、DOM 色彩普查。
 * 四套变体重跑审计：`content.size` 从 666 变成一致的 **621**；`--theme-pwr` 四套 = 对应 important、
   其余五槽 = 对应 accent、`ready.dot`/`themeBtn.cyber`/`oem.blocked`/`sponsorHeart` = accent、
-  `oem.running` = important、`dom.hueFamilies` = 2 —— 全部符合预期（干净读数表见 `HANDOFF.md` §11.4）。
+  `oem.running` = important、`dom.hueFamilies` = 2 —— 全部符合预期
+  （这份干净读数表已落成 `_tools/verify.sh` 的 132 条断言，字段含义见 `reference/preview-and-audit.md` §6）。
 
 > **纪律**：放进验收工具的诊断代码**只准读，不准改 DOM**；确需改就在 `finally` 里还原。
 > 问题查清后要主动删掉实验代码 —— 留在那里的诊断会变成下一次的假数据。
@@ -282,7 +283,8 @@ clone 节点、重新挂载节点、反复触碰 class……用来定位「`.m-b
 
 ### 11.4 验收从「人眼对表」升级为可执行断言（2026-10-04 第二轮）
 
-上一轮把验收写成了 `HANDOFF.md` §11.4 的一张表，靠人读产物对数字。它有两个已经付过学费的漏洞：
+上一轮把验收写成了一张靠人读产物对数字的表（即原 `HANDOFF.md` §11.4；该接手文档已于 2026-10-04 删除，
+原文件保留在 git 提交 `c1e2e03` 里）。它有两个已经付过学费的漏洞：
 §11.2 的假通过（`dom.hueFamilies` 恰好也是 2），以及重跑多次之后**没人能证明每一条都被核过**。
 
 这一轮做了两件事：
@@ -298,4 +300,30 @@ clone 节点、重新挂载节点、反复触碰 class……用来定位「`.m-b
 
 > 纪律：`dom.hueFamilies = 2` **单独出现不算通过**（负向条件会被「全是宿主原色」骗过）；
 > 动过预览页或皮肤 CSS **必须**跑一次 `PAGES=preview-mini.html:mini bash _tools/_stress.sh 48 8`。
-> 验收结论只认 `verify.sh` 的 exit code —— 这条已写进 `SKILL.md` 验收清单、`HANDOFF.md` §11.4/§11.6 与 `README.md`。
+> 验收结论只认 `verify.sh` 的 exit code —— 这条已写进 `SKILL.md` 验收清单、`README.md` 维护约定
+> 与 `_tools/verify.sh` 的文件头注释。
+
+## 12. 文档整理与手册消化（2026-10-04 第三轮）
+
+这一轮不改任何皮肤代码，只把「知识」收拢成能长期用的形态。
+
+* **手册消化**：把 783 行的官方 v1.0 手册消化成 `reference/plugin-manual-digest.md` —— 定位、插件六形态矩阵、
+  清单九字段、8 大硬件 IPC、遥测铁律、七用例、Safe Mode，外加一张 **§10「手册 ≠ 发行版」对照表**（7 条）。
+  手册自身的不一致也记了：示例里的 `"type"` 是旧写法（权威键 `plugin_type`）、`always_on_top` vs `alwaysOnTop`、
+  用例 3 的 `target` 字段不在字段表里。
+* **环境与工具集中成一页**：新建 `reference/environment-and-tools.md`，把原先两份一次性接手文档里**长期有效**的部分
+  收拢：环境硬事实 20 行（宿主会自我更新并重启、插件只在启动时枚举、宿主周期性整份回写 config、显示器缩放、
+  双面板几何、`read_image` 不可用、抓图代价、BOM 纪律、MSYS 错位）、`_tools\` **34 个工具**的地图与取舍、
+  证据文件索引、回退/还原（含三个未替用户还原的字段）、以及「本任务明确没做的事」。
+* **删除接手文档**：`HANDOVER.md`（17,544 B）与 `HANDOFF.md`（33,300 B）已删。删之前先建了本仓库的**首个 git 提交**
+  `c1e2e03`（113 个跟踪文件）—— 此前仓库 0 commit，删掉就不可恢复；同时加了 `.gitattributes` 的 `* -text`，
+  因为本仓库存在「逐字节一致」类断言，git 默认的 CRLF↔LF 归一化会把这些证据改坏。
+  保真验证：`git clone` 到 `_audit/_clonecheck` 后 `cmp` 八个字节敏感文件（两套 `theme.css`、`_extracted/host-shell.css`、
+  `_tools/set-active-skin.ps1`、`_tools/who.ps1`、`docs/SKILL.md`、两份接手文档）全部 OK，克隆目录已删。
+* **引用清理**：`_tools/verify.sh` 与 `_tools/set-active-skin.ps1` 的文件头注释、本文件四处历史引用（§6.1 / §11.3 / §11.4×2）
+  全部改成指向现存文档；`docs/SKILL.md` 新增「官方手册消化件」一节、参考地图补两页、现状快照改为收尾时的事实；
+  `docs/README.md` 的树与维护约定同步（并记上 DSH 技能副本路径）。`.ps1` 有 BOM，DSH 的 `edit` 会吃掉它，
+  改完用 Python 补回并复核（`ef bb bf`），再用 `[Parser]::ParseFile` 确认 0 error。
+* **顺手更正一条旧结论**：`_tools/pin-grab.ps1` 的 `Say()` **是已定义的**（第 8 行 `function Say($m){...}`），
+  旧接手文档说它「未定义」是陈旧结论 —— 它当初无效的真实原因另有其人（`show-app.ps1` 只 show 不置顶、
+  `capwin.ps1` 对 Tauri 返回全 alpha=0）。

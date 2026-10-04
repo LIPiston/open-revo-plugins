@@ -13,12 +13,14 @@ docs\
 ├── README.md                            # 本文件
 ├── SKILL.md                             # 技能入口：硬约束 + 工作流 + 验收清单 + 参考地图
 ├── devlog.md                            # 开发记录（时间线 + 证据 + 未决项）
-├── OpenRevo_第三方插件开发手册.md         # 官方手册 v1.0（用例 7 = 皮肤插件）
+├── OpenRevo_第三方插件开发手册.md         # 官方手册 v1.0 存档（用例 7 = 皮肤插件）
 └── reference\
+    ├── plugin-manual-digest.md           # 手册消化件 + 「手册 ≠ 发行版」对照表
     ├── host-truth-extraction.md          # 从 exe 抽宿主 CSS/JS；宿主 DOM/令牌/!important 对手规则
     ├── skin-authoring.md                 # manifest/目录、令牌与镜像架构、特异性阶梯、双面板配方
     ├── preview-and-audit.md              # 预览页能力与 URL 参数、无头 Chrome 命令、像素判据
     ├── real-machine-verification.md      # 提权重启/唤醒/置顶抓图/度量与实测基线
+    ├── environment-and-tools.md          # 环境硬事实 + 工具地图 + 证据索引 + 回退清单
     └── pitfalls.md                       # 踩坑总表：现象 → 原因 → 对策
 ```
 
@@ -27,9 +29,14 @@ docs\
 * **人**：先读 `SKILL.md` 的「动手前必读的硬约束」，再按「标准工作流」表走；卡住时查 `pitfalls.md`。
 * **Agent**：把整个 `docs\` 当作技能目录（建议目录名 `openrevo-skin-plugin\`），加载 `SKILL.md` 作为入口；
   只有需要细节时才读 `reference\` 下的文件，避免一次性灌入全部内容。
+  另有一份对应的 DSH 技能可直接召唤：`C:\Users\LIPis\.dsh\skills\openrevo-skin-plugin\SKILL.md`
+  （**浓缩版入口**，真值仍以本目录为准；本目录改了要顺手同步它）。
 
 ## 维护约定
 
+* 要接手/交接这摊事（环境、工具在哪、证据在哪、怎么退回用户原状、哪些明确没做）→ 直接看
+  `reference\environment-and-tools.md`。原先那两份一次性接手文档（`HANDOVER.md` / `HANDOFF.md`）已于
+  2026-10-04 删除，耐久内容全部并入该页；原件保留在 git 提交 `c1e2e03` 里，随时可取回。
 * 宿主升级后，`reference\host-truth-extraction.md` 里的**字节偏移、规则条数**会失效，必须重新定位
   （真实案例与复核流程：`devlog.md` §9、`reference\real-machine-verification.md` §2.1）；
   `real-machine-verification.md` 里的几何/直方图/MAE 是**该版本的基线**，仅用于回归对比。

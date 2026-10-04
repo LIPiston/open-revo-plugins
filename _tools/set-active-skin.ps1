@@ -1,10 +1,10 @@
-﻿# set-active-skin.ps1 —— 让 config.json 的 active_skin 真正指向新皮肤 ID（把 §3 ④ 收成一条命令）。
+﻿# set-active-skin.ps1 —— 让 config.json 的 active_skin 真正指向新皮肤 ID（把「切皮肤」收成一条命令）。
 #
 #   powershell -ExecutionPolicy Bypass -File _tools\set-active-skin.ps1                    # 默认 skin-win11-dark
 #   powershell -ExecutionPolicy Bypass -File _tools\set-active-skin.ps1 skin-win10-light
 #   powershell -ExecutionPolicy Bypass -File _tools\set-active-skin.ps1 "" dry             # 只看现状与计划，什么都不改
 #
-# 参数走 $args（MSYS 调 powershell -File 时显式具名参数会被吃掉，见 HANDOVER §5）。
+# 参数走 $args（MSYS 调 powershell -File 时显式具名参数会被吃掉，见 docs\reference\environment-and-tools.md §1）。
 #
 # 为什么不能简单地"改了就完事"：宿主（Tauri）运行中持有权威内存态，会**周期性整份回写** config，
 # 把外部改写冲掉 —— 2026-10-04 实测两次（10:13:06、11:26:44），期间无人碰过它。见 pitfalls #37。

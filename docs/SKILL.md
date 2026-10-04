@@ -11,7 +11,8 @@ description: 为 OpenRevo（open-revo.exe）开发、修改、验证 Windows 组
 
 * 项目根目录（下文相对路径都基于它）：`D:\LIPis\Documents\code\openrevo-plugins\`
   （harness 工作区 `D:\LIPis\Documents\deepseek-harness\default-workspace\openrevo-win-skin\` 是**改名前的过期镜像**，别拿它当盘）
-* 规范来源：`docs\OpenRevo_第三方插件开发手册.md`（v1.0，**用例 7 = 皮肤插件**，见其 L659 附近）
+* 规范来源：`docs\OpenRevo_第三方插件开发手册.md`（v1.0，**用例 7 = 皮肤插件**，见其 L659 附近）；
+  已消化成 `reference\plugin-manual-digest.md`（含「手册 ≠ 发行版」对照表），日常查那份就够
 * 版式参照物（只读原型）：`D:\LIPis\desktop\openrevo ui`
 * 宿主：`D:\Program Files\OpenRevo\open-revo.exe`（**唯一真值来源**，版本随发行变动）
 * 产物安装位：`%APPDATA%\OpenRevo\plugins\<skin_id>\`；宿主配置：`%APPDATA%\OpenRevo\config.json`
@@ -28,6 +29,26 @@ powershell -NoProfile -Command "Start-Process powershell -Verb RunAs -WindowStyl
 ```
 
 看效果：双击 `preview.html`（主窗）、`preview-mini.html`（迷你面板），顶部按钮即时切换四套皮肤。
+
+## 官方手册消化件（v1.0 / 783 行 → `reference/plugin-manual-digest.md`）
+
+皮肤只是 OpenRevo 插件生态里的一个形态，改造宿主前先知道这套规矩：
+
+| 项 | 事实 |
+|---|---|
+| 项目定位 | 笔记本硬件**微内核**：Rust Ring0/ACPI/EC 钥匙库（Vault）+ Tauri 2 IPC + HAL **语义化**能力网关。官方 React 主控台只是默认客户端，一切皆插件 |
+| 插件根 | `%APPDATA%\OpenRevo\plugins\<plugin_id>\`（目录名 = `manifest.json` 的 `id`） |
+| 插件六形态 | `skin` 0MB（注入 `theme.css` + 挂 `data-skin`）/ `tab` 主窗沙盒 iframe <5MB / `widget` 独立 Edge WebView2 15–25MB / `service` Rust Rhai 无头 <100KB / `shell` 独立全尺寸 ~35MB / `driver` 原生 `.dll`（只在手册矩阵里，不在字段枚举里） |
+| 清单权威键 | `id`/`name`/`version`/**`plugin_type`**（手册示例写 `"type"` 是旧写法）+ `theme_css`（skin 必填）/`entry`/`window`/`telemetry`/`permissions` |
+| 8 大硬件 IPC | `set_fan_boost`、`set_power_mode{1 办公\|2 均衡\|3 狂暴\|4 自定义}`、`set_battery_limit{60..100}`、`switch_refresh_rate`、`set_gpu_mode{discrete\|hybrid}`、`apply_four_zone_colors`、`set_water_cooler_speed`、`set_device_switch{camera\|mic\|touchpad\|winlock}`；入口 `import { invoke } from '@tauri-apps/api/core'`，**未在 `permissions` 声明会被安全网关拦** |
+| 安全军规 | 禁裸 EC 寄存器写入（只给语义化指令）；功耗墙/电池限额由固件钳位；主线程禁阻塞，网络与大模型必须异步流式 |
+| 遥测铁律 | 不声明 `gpu_*`，内核**绝不**调 NVAPI（独显保 D3Cold 0W）；纯陪伴挂件用 `"telemetry":{"enabled":false}` 让遥测深睡；前端 `listen('hardware-state-updated')` |
+| 排障 | Safe Mode 二分法：编辑 `config.json` 的 `custom_plugin_toggles` 把嫌疑 ID 置 `false` 再重启（本项目实测该键存在） |
+
+**手册 ≠ 发行版**（7 条对照表在 `reference/plugin-manual-digest.md` §10；最要紧的三条）：手册 §7 示例的
+`.overview-main-grid` / `.sensor-gauge-cluster` / `.cooling-fan-card` / `.power-mode-selector` 在发行版里**不存在**；
+手册的 `--core-*` / `--surface-*` / `--status-*` 令牌也不存在（真值是 `--wf-*` 一套）；
+手册说「插件页点刷新即热加载」——**皮肤必须重启宿主**。
 
 ## 动手前必读的硬约束
 
@@ -112,26 +133,34 @@ powershell -NoProfile -Command "Start-Process powershell -Verb RunAs -WindowStyl
 ```
 docs\
 ├── SKILL.md                              # 本文件：硬约束 + 工作流 + 验收清单
-├── devlog.md                             # 开发记录：时间线 + 每一步的数字证据
-├── OpenRevo_第三方插件开发手册.md          # 官方手册 v1.0（用例 7 = 皮肤）
+├── devlog.md                             # 开发记录：时间线 + 每一步的数字证据 + 未决项
+├── README.md                             # 文档与技能包怎么用、维护约定
+├── OpenRevo_第三方插件开发手册.md          # 官方手册 v1.0（存档原文）
 └── reference\
+    ├── plugin-manual-digest.md            # 手册消化件 + 「手册 ≠ 发行版」对照表
     ├── host-truth-extraction.md           # 从 exe 抽宿主 CSS/JS、DOM 结构、宿主令牌与对手规则
     ├── skin-authoring.md                  # manifest/目录规范、令牌架构、特异性阶梯、双面板改造配方
     ├── preview-and-audit.md               # 预览页能力、无头 Chrome 命令、审计与像素判据
     ├── real-machine-verification.md       # 真机流程：提权重启/唤醒/置顶抓图/度量（含实测基线数字）
+    ├── environment-and-tools.md           # 环境硬事实 + 34 个工具地图 + 证据索引 + 回退清单
     └── pitfalls.md                        # 踩坑总表（按「现象 → 原因 → 对策」）
 ```
 
-## 现状快照（本技能写下时）
+## 现状快照（2026-10-04 收尾时）
 
-* 四套皮肤已安装并被用户在宿主【插件】页选用（`active_skin = skin-win11-dark`），皮肤互斥、切换 0ms 热加载。
-* 主窗：WinUI3 左侧栏（224px）+ 完全不透明，**真机已确证**（`_shots\real-dash-1500.png`）。
+* 四套皮肤已安装并被用户在宿主【插件】页选用；`active_skin` 现在是 `skin-win11-dark`
+  （**宿主自己写成的** —— 改名后旧 ID 悬空，宿主启动时按新 ID 自愈）。皮肤互斥、切换 0ms 热加载。
+* 主窗：WinUI3 左侧栏（224px）+ 完全不透明，**真机已确证**（`_shots\real-dash-1500.png`，1702×1213）。
 * 迷你面板：同步 WinUI3 化 + 不透明，**真机已确证**（`_shots\real-mini-clean.png`）。
-* **配色已收敛为二色体系**（2026-10-04）：迷你面板色相族 6 → 2，主控台 2 族（accent + 状态点绿）。
-  取证是**无头**的（DOM 普查 + PNG 像素普查），改完还没重抓真机图 —— 需要提权重启宿主才会加载新皮肤，
-  会打断用户，须先征得同意。
+* **配色已收敛为二色体系**：迷你面板色相族 6 → 2，主控台 2 族（accent + 状态点绿）。
+  验收 = `bash _tools/verify.sh` **132 条断言全绿**（`exit 0` 才算过）；曾有的偶发竞态（并发下 ≈17%）
+  已由 `preview-mini.html` 的 `settleStyle()` 收口，`settle.remounts = 1` 是正向证据之一。
+* 真机取证的重要结论：**截图不能判别「换肤是否生效」** —— 改名前后 `theme.css` 逐字节同源，像素必然一样；
+  招牌色也不能当正控（精确命中 0 px）。详见 `reference/real-machine-verification.md` §9。
 * 已知残留（不影响「侧栏 + 不透明」两条结论）：迷你面板底部有一条细横向滚动条（宿主自身内容 **410×621** CSS > 窗口 610，
   纵向滚动条是宿主固有的，皮肤把它从 4px 加宽到 12px 后才引出横条）；主窗顶部 ~100 CSS px 与预览有亮度差
   （抓图时宿主停在别的 tab 页）。两者都写进 `devlog.md` 的「未决」段。
+* 现场残留（要交接的东西）：桌面上还留着一次抓图唤醒的大面板、`config.json` 有三个字段未替用户还原 ——
+  清单在 `reference/environment-and-tools.md` §4。
 * 文档里的**数字**都在 2026-10-03 对着磁盘/宿主复核过一轮（修正了 `host-shell.css` 体积、CSS 规则数、`preview.html`
   行数、`build_skins.py` 行号等），并补上了「宿主自我更新」的复核流程与 `wins.ps1` 的澄清；核对过程与证据见 `devlog.md` §9。
