@@ -20,7 +20,8 @@
 | 宿主 exe | `D:\Program Files\OpenRevo\open-revo.exe`，**唯一真值来源** |
 | **宿主会自我更新并重启** | 开发中途真实发生过（8,490,496 → 8,496,640 B；exe mtime 23:49:31、进程 23:54:17 自动重启）⇒ 一切**字节偏移 / 文件大小**断言当场作废。动手前先比 exe 的 mtime/大小与进程 StartTime；判断宿主 CSS 是否变化要用**资产文件名里的内容哈希**（`index-<hash>.css`），本次哈希未变、抽出内容与旧构建逐字节相同 |
 | 宿主进程权限 | `requireAdministrator` → `taskkill /F` 被拒（拒绝访问）。重启必须走提权 `_tools\kill-and-start.ps1`。观测样例：pid 3976 / StartTime `2026/10/4 9:48:00` |
-| **插件枚举时机** | **只在宿主启动时枚举一次插件目录**。装完不重启 = 新皮肤/新 ID 完全不生效（`_tools\when.ps1` 比对进程启动时间 vs 插件目录 mtime） |
+| **插件枚举时机** | **0.8.7：只在宿主启动时枚举一次插件目录**，装完不重启 = 新皮肤/新 ID 完全不生效。**0.8.8：插件页【刷新】可重扫列表**（`get_custom_plugins`），新目录不用重启；但【刷新】**不重注入**已激活插件的 CSS，改已有 `theme.css` 仍需关/开一次开关。`active_skin` 指向已删 ID 时仍须「停 → 改 → 启」（`_tools\when.ps1` 比对进程启动时间 vs 插件目录 mtime） |
+| `active_background` | 0.8.8 新增：与 `active_skin` **独立的第二个 CSS 槽位**（`plugin_type:"background"` → `load_plugin_background_css` → `<style id="openrevo-custom-background">`）。当前实测值 = 未设置（宿主 `config.json` 里没有该键） |
 | `wake_window_mode` | **只在启动时读入**。用户原值是 `mini`（临时改过就必须还原） |
 | **宿主会周期性整份回写 config** | 实测 2026-10-04 的 10:13:06 / 11:26:44 / 12:06:33，期间无人碰它 ⇒ 外部改写会被冲掉，改 `active_skin` 的顺序必须是**停 → 改 → 启**（`_tools\set-active-skin.ps1`，见 `pitfalls.md` #37） |
 | 配置文件 | `%APPDATA%\OpenRevo\config.json`（观测 3678 B @ 2026-10-04 12:16:56）。相关键：`active_skin`、`wake_window_mode`、`custom_plugin_toggles`（实测存在，含 `{"eva01-core": false}`）、`power_mode` / `power_mode_ac`、`refresh_rate`、`gpu_mode`、`full_window_x/y`。**具体值以当场实读为准**，本表不当权威 |
@@ -101,4 +102,6 @@
 * 没有拿到用户对四套皮肤的观感确认（`read_image` 不可用，观感只能由用户看真机）。
 * 没有在宿主自我更新后重新抓真机像素（只用「CSS 资产内容哈希未变 + 逐字节相同」推断不受影响）。
 * 没有改 `dist\` 前的旧 ID 目录做任何恢复动作（已删；新 ID 与它逐字节同源，见 `real-machine-verification.md` §9）。
-* 没有对 `tab` / `widget` / `service` / `shell` / `driver` 五种形态做过任何实测（只消化了手册，见 `plugin-manual-digest.md`）。
+* 没有对 `tab` / `widget` 做过任何实测（只消化了手册，见 `plugin-manual-digest.md`）。0.8.8 前端里
+  `plugin_type` 的字面量只出现 `background|skin|tab|widget` 四种，**`service` / `shell` / `driver` 在 JS 里没有
+  字面量**，三种形态均未证实（见 `plugin-dev-0.8.8-skill.md` §6）。

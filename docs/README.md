@@ -15,15 +15,20 @@ docs\
 ├── devlog.md                            # 开发记录（时间线 + 证据 + 未决项）
 ├── OpenRevo_第三方插件开发手册.md         # 官方手册 v1.0 存档（用例 7 = 皮肤插件）
 └── reference\
+    ├── plugin-dev-0.8.8-skill.md         # 官方新版 Skill（0.8.8）逐条实测对照 + 背景壁纸通道
     ├── plugin-manual-digest.md           # 手册消化件 + 「手册 ≠ 发行版」对照表
     ├── host-truth-extraction.md          # 从 exe 抽宿主 CSS/JS；宿主 DOM/令牌/!important 对手规则
     ├── skin-authoring.md                 # manifest/目录、令牌与镜像架构、特异性阶梯、双面板配方
-    ├── background-plugin.md              # 自定义背景图独立插件：data URI、遮罩同层、单 CSS 通道互斥、背景验收
+    ├── background-plugin.md              # 自定义背景图独立插件：data URI、遮罩同层、0.8.7 单通道互斥 → 0.8.8 background 通道
     ├── preview-and-audit.md              # 预览页能力与 URL 参数、无头 Chrome 命令、像素判据
     ├── real-machine-verification.md      # 提权重启/唤醒/置顶抓图/度量与实测基线
     ├── environment-and-tools.md          # 环境硬事实 + 工具地图 + 证据索引 + 回退清单
     └── pitfalls.md                       # 踩坑总表：现象 → 原因 → 对策
 ```
+
+> **仓库外的原文**：开发者新版 skill 在 `D:\LIPis\desktop\openrevo-plugin-dev\SKILL.md`（415 行）。
+> 它**不在本仓库内**，所以上面的对照页 `plugin-dev-0.8.8-skill.md` 是它的**唯一耐久存档**；
+> 原文若变动，以本页记录的实测判定为准重新核对。
 
 ## 怎么用
 
@@ -44,7 +49,10 @@ docs\
 * 代码改完请同步这三处：`README.md`（项目根）、`docs\devlog.md`（这一轮新增了什么）、
   以及受影响的 `docs\reference\*.md`。
 * **配色是硬约束**：整份 UI 只有 `--wf-accent`（系统主题色）+ `--wf-important`（重要强调色）两个装饰色
-  （用户口径 m00001 / m00053）。加新部件时先读 `SKILL.md` 的「配色纪律」一节；
+  （用户口径 m00001 / m00053）。⚠️ `--wf-*` 是**本工具链自己的前缀**（`build_skins.py` 的 `token_block()` :352
+  把配色写进宿主 `--theme-<key>{,-border,-dim,-glow}` 槽位后镜像而来），**不是宿主令牌** —— 宿主真值是
+  `--surface-*` / `--border-*` / `--text-*` / `--status-*` / `--radius-*`（见 `reference\plugin-dev-0.8.8-skill.md` §5.2）。
+  加新部件时先读 `SKILL.md` 的「配色纪律」一节；
   改完必须跑 `bash _tools\verify.sh`（验收总闸，132 条断言，`exit 1` 就是没改完）；它内含 `audit.sh`
   的 `dom.hueFamilies = 2` 与 `census.py` 的色族数 = 2，并额外核对正向条件 —— **只看族数 = 2 会骗人**：
   坏读数里全是宿主原色时，族数也恰好是 2（`pitfalls.md` #35 / #39）。动过预览页或皮肤 CSS 后，另跑
@@ -53,11 +61,14 @@ docs\
   `python build_background.py build`（重新编码图片）再跑 `bash _tools\verify-bg.sh` —— 它第一条就是
   「既有 132 条无回归」，所以背景链不会绕过皮肤验收。产物 `bg-custom\`（默认）与 `<id>-bg\`（显式
   `--targets` 才有）**入库即装即用**，与四套 `skin-*\` 同等对待；`assets\sample-wallpaper.jpg` 是
-  确定性源图，保证任何 clone 都能构建出同一份产物。宿主只有一条 CSS 注入通道、`active_skin` 单值，
-  所以「背景插件」与「Fluent 皮肤」在宿主层面互斥 —— 详见 `reference\background-plugin.md` §0。
+  确定性源图，保证任何 clone 都能构建出同一份产物。⚠️ **0.8.7** 宿主只有一条 CSS 注入通道、`active_skin` 单值，
+  那时「背景插件」与「Fluent 皮肤」在宿主层面互斥；**0.8.8 已新增 `plugin_type:"background"` 的独立通道**
+  （`active_background` → `<style id="openrevo-custom-background">`），两者可同时启用 —— 详见
+  `reference\background-plugin.md` §0、`reference\plugin-dev-0.8.8-skill.md` §1。
   **按用户口径 m00785，这部分功能「先不做」**：代码与验收都在，但**刻意不装进宿主、不激活**
-  （宿主侧零改动，`active_skin` 仍是 `skin-win11-dark`），等 OpenRevo 开放接口；需要什么接口见
-  `README.md` §11.4 的三选一表，现状说明见 `reference\background-plugin.md` §0.2。
+  （宿主侧零改动，`active_skin` 仍是 `skin-win11-dark`）。卡点已在 0.8.8 解除，但本仓库产物仍是
+  `plugin_type:"skin"` 形态，改造前装上仍会顶掉皮肤；改造清单见 `reference\plugin-dev-0.8.8-skill.md` §7 第 8 项，
+  现状说明见 `reference\background-plugin.md` §0.2。
 * **本目录只在权威树 `D:\LIPis\Documents\code\openrevo-plugins\` 维护。**
   历史上同一份内容散在两棵树里，已踩过「改了 A 树、审计了 B 树」的坑；
   harness 工作区那棵 `…\default-workspace\openrevo-win-skin\` 是 2026-10-04 改名前的快照，**已作废，不要再同步**。

@@ -58,7 +58,8 @@
   | `skin-win10-dark` | `#1683d8` | 2px | 1080×780 | 50,323 B |
 
 * `<id>\theme.css` 与 `%APPDATA%\OpenRevo\plugins\<id>\theme.css` **逐字节一致** → 安装即为最新。
-* 安装后**必须重启宿主**才可见（宿主只在启动时枚举插件目录）——这一条先后坑了两次。
+* 安装后**必须重启宿主**才可见（0.8.7 时宿主只在启动时枚举插件目录；**0.8.8 起插件页【刷新】可重扫列表**，
+  见 §14）——这一条先后坑了两次。
 
 ## 4. 主控台：WinUI3 侧栏 + 取消半透明（m00236）
 
@@ -146,16 +147,15 @@
 5. ~~`preview-mini.html` 里早期排查用的实验钩子（A–J）已无用，可以删掉。~~ —— **2026-10-04 已删**，
    并且发现它们一直在**污染**审计读数（`content.size` 被撑高 45px）。见 §11。
 6. 用户在宿主【插件】页对四套皮肤的观感反馈尚未收到（皮肤本身功能已验收）。
-7. **背景插件：功能已完成并验收，但按 m00785 刻意不装、不激活。**（`build_background.py status` 里
-   `bg-custom installed[--]`）产物在仓库里已就绪，`--install` 会把它同步到 `%APPDATA%\OpenRevo\plugins\`，
-   但要**重启宿主**才认（宿主只在启动时枚举插件目录）。用户 2026-10-04 的决定是
-   **「既然已知不行那就先不做，然后更新文档，等待开发者开放更多接口」**，所以宿主侧保持零改动、
-   `active_skin` 仍是 `skin-win11-dark`。见 `reference/background-plugin.md` §0.2 / §7。
-8. **背景插件与 Fluent 皮肤在宿主层面互斥**（宿主只有一条 CSS 注入通道、`active_skin` 单值）——
-   这是宿主设计，本插件无法绕过；要同时生效只能用派生的 `<id>-bg` 皮肤。已在 `README.md` §11.3/§11.4 与
-   参考文档 §0 明确写出。**这不是待用户拍板的取舍题，而是待宿主开放的接口缺口**：需要的接口已在
-   `README.md` §11.4 列成三选一（第二条 CSS 注入通道 / `active_skin` 分槽多值 / 原生背景图配置键）。
-   三者任一落地即可解除阻塞，届时仓库侧不需改动，重新构建 + `install --activate` + 重启即可。
+7. **背景插件：功能已完成并验收，仍按 m00785 刻意不装、不激活。**（`build_background.py status` 里
+   `bg-custom installed[--]`）产物在仓库里已就绪，`--install` 会把它同步到 `%APPDATA%\OpenRevo\plugins\`。
+   用户 2026-10-04 的决定是**「既然已知不行那就先不做，然后更新文档，等待开发者开放更多接口」**，
+   所以宿主侧保持零改动、`active_skin` 仍是 `skin-win11-dark`。见 `reference/background-plugin.md` §0.2 / §7。
+   ⚠️ **2026-10-05 更新（0.8.8）**：接口缺口已被宿主自己补上（见 §14），但产物形态仍是 `plugin_type:"skin"`，
+   改造前装上仍会顶掉皮肤 ⇒ **不装的口径继续有效**。
+8. ~~**背景插件与 Fluent 皮肤在宿主层面互斥**~~ —— **接口缺口已在 0.8.8 解除**（见 §14）：
+   宿主新增 `plugin_type:"background"` + `active_background` 独立槽位 + Background Engine 零代码壁纸。
+   0.8.7 的互斥结论作为历史保留在 §13.2；本仓库产物改造清单见 `reference/plugin-dev-0.8.8-skill.md` §7 第 8 项。
 
 ## 9. 宿主自动更新复核（开发中途真实发生）
 
@@ -347,14 +347,21 @@ clone 节点、重新挂载节点、反复触碰 class……用来定位「`.m-b
 > 等待开发者开放更多接口」。所以本节记录的是**已实现、已验收、但刻意未安装**的状态：
 > 宿主 `plugins\` 里没有 `bg-custom`，`active_skin` 保持 `skin-win11-dark`，宿主侧零改动。
 > 卡点不是代码而是宿主只给一条 CSS 通道（§13.2 的互斥结论），需要的接口列在 `README.md` §11.4。
+>
+> ⚠️ **读本节须知**：§13.1 / §13.2 是 **0.8.7 时代**的取证与结论，**作为历史保留**。
+> 0.8.8 已把那个接口缺口补上（`plugin_type:"background"` + `active_background` 独立槽位），
+> 后续进展见 **§14**；本节不再代表当前宿主能力。
 
 ### 13.1 先证伪「宿主本来就有背景能力」
 
-* 在 `open-revo.exe` 里检索 `background_image` / `backgroundImage` / `wallpaper` / `bg_image` → **命中 0**；
+* 在 `open-revo.exe`（0.8.7）里检索 `background_image` / `backgroundImage` / `wallpaper` / `bg_image` → **命中 0**；
   宿主 `config.json` 里也没有任何相关键 ⇒ 背景必须由插件注入的 `theme.css` 承载。
+  （**0.8.8 已推翻**：`set_active_background` / `load_plugin_background_css` 都落地了，见 §14。）
 * `theme.css` 必须是**单文件自包含**：宿主把整份文本塞进 `<style id="openrevo-custom-skin">`，
   `@import` 与相对 `url()` 都按 `tauri://` 解析、够不到插件目录；`file://` 又被 WebView2 拒。
   ⇒ 图片只能内联成 base64 `data:` URI（2560×1440 q88 → 136,339 B，占 theme.css 的 95%）。
+  （**0.8.8 补充**：走 `theme_css` 通道时这条仍然成立；但宿主另开了 `background` 通道，
+  图片可由 Rust 的 Background Engine 自己读文件转 Data URI，见 §14。）
 
 ### 13.2 架构：先做派生皮肤，再按用户口径退回独立插件
 
@@ -363,7 +370,7 @@ clone 节点、重新挂载节点、反复触碰 class……用来定位「`.m-b
   「既有 132 条无回归」）。
 * 用户 m00357 明确定调「**跟 win skin 没有关联性**，是个单独的插件」⇒ 默认口径改为只出独立插件
   `bg-custom`，派生皮肤降级为 `--targets` 显式开启的可选导出（代码与 50 条断言都保留）。
-* 但取证发现一条**宿主硬约束**，必须如实告知而不是绕开：宿主全树只有**一处** CSS 注入点
+* 但取证发现一条**宿主硬约束**（**0.8.7 版，0.8.8 已解除，见 §14**）：宿主全树只有**一处** CSS 注入点
   （`<style id="openrevo-custom-skin">` ← `load_plugin_theme_css`），且插件页切皮肤时对 `plugin_type==="skin"`
   走 `set_active_skin` + **单选**（`enabled: T.id===D`），非 skin 插件走 `set_custom_plugin_enabled`
   **永不注入 CSS**。⇒ 背景插件只能做成 `skin` 形态，于是必然占用唯一的 `active_skin` 槽位 ——
@@ -424,3 +431,78 @@ clone 节点、重新挂载节点、反复触碰 class……用来定位「`.m-b
   `docs/README.md` 维护约定、`SKILL.md` 现状快照四处同步了「先不做」的口径，
   以免后来者（或下一个 agent）看到 `bg-custom\` 就顺手 `install --activate`。
 * 解除阻塞后不需要改代码：`set → install --activate → 重启宿主` 即可，产物可复现性已用 sha1 钉死。
+  （**0.8.8 更正**：接口已落地，但**需要改代码** —— 产物得从 `plugin_type:"skin"` 改成 `"background"`，
+  见 §14.3。）
+
+## 14. 宿主 0.8.8：背景壁纸通道与文档反转（2026-10-05 第五轮，用户口径 m01028）
+
+用户说「openrevo 更新了 / 现在支持更多接口了」，并给出开发者从源码整理的新 Skill
+（`D:\LIPis\desktop\openrevo-plugin-dev\SKILL.md`，415 行）。本轮口令是「**先合入文档**」——
+即把新 Skill 的每条断言**逐条对着真机 0.8.8 二进制核验**，属实的写进仓库，不属实的标出来，
+同时把仓库里被这轮实测**推翻的旧结论**一并反转。完整对照件：`reference/plugin-dev-0.8.8-skill.md`。
+
+### 14.1 取证方法：宿主升级后一切偏移作废，必须重新抽前端
+
+* exe 从 8,496,640 B → **8,565,760 B**（FileVersion/ProductVersion = **0.8.8**），
+  前端切片名也换了：CSS `index-C535NsqC.css` → **`index-D5aBypuh.css`**（路径 @ 7,348,018 →
+  负载 @ 7,348,044，解出 55,011 B / 375 个 `{`），JS `index-BzQyTcpV.js` → **`index-Tu8RPoda.js`**
+  （路径 @ 7,004,288 → 负载 @ 7,004,313，解出 598,008 B / 7,360 个 `{`）。
+* **教训一（明文 grep 会骗人）**：直接在 exe 上 grep `openrevo-custom-background` / `data-background` 是
+  **0 命中**，于是差点得出「新功能没落地」的错结论。根因是**前端整份 brotli 压缩在 exe 里**，
+  只有 Rust 侧字符串是明文。**必须先把 `index-*.js` / `index-*.css` 抽出来再 grep**
+  （方法见 `host-truth-extraction.md`；blob 表里的路径**带 `/assets/` 前缀**）。
+* **教训二（Rust 字符串 ≠ JS 字符串）**：`get_active_background` 在 exe 里 **0 命中**、只在 JS 里出现
+  （`await m("get_active_background")`）—— 因为它是**前端调用的命令名**，Rust 侧注册的是
+  `set_active_background` / `load_plugin_background_css`。查一条链路要两边都查。
+
+### 14.2 核实结果：新 Skill 的断言哪些成立
+
+| # | 断言 | 判定 | 证据 |
+|---|---|---|---|
+| 1 | 背景是**第二条 CSS 通道**，与皮肤解耦 | ✅ 属实 | `active_background` 独立槽位；`plugin_type==="background"` 真分支；`<style id="openrevo-custom-background">` |
+| 2 | 注入点改名 `openrevo-custom-skin` → `openrevo-theme-skin` | ✅ 属实 | 新 JS 里读取时会**就地改名**：`w?w.id="openrevo-theme-skin"` |
+| 3 | `data-skin` 与 `data-background` 同挂 `documentElement` | ✅ 属实（0.8.8 新行为） | `C?P.setAttribute("data-skin",C):P.removeAttribute("data-skin")` |
+| 4 | 零 Base64：作者写相对 `url()`，Rust 自动转 Data URI | ⚠️ **半对** | 机制在，但**只对固定文件名的图片探测生效**；exe 里**没有**任何「读作者 CSS 找 `url()` 再改写」的代码痕迹 |
+| 5 | 背景可用**只放 manifest + 一张图**的零代码方式 | ✅ 机制属实 / ❌ 语法写错 | 图片按 **12 个固定文件名**探测（`background|wallpaper|bg` × `.jpg/.jpeg/.png/.webp`），**不是** skill 写的 `"image":"wallpaper.jpg"` 键（该键 exe 0 命中） |
+| 6 | 插件页点【刷新】即热刷新 CSS | ❌ **不成立** | 刷新按钮只调 `get_custom_plugins` **重扫列表**；已激活插件的 CSS 不重注入，改 CSS 要关/开一次开关 |
+| 7 | `plugin_type` 有七种形态（含 `service`/`shell`/`driver`） | ⚠️ 未证实 | 前端字面量只有 `background|skin|tab|widget` 四种 |
+| 8 | manifest 里 `permissions` 字段 | ❌ 不成立 | exe 0 命中，字段表里没有 |
+| 9 | `plugin_type` 与 `type` 完全等价 | ⚠️ 未证实 | exe 里 `"type"` 字面量 0 命中 ⇒ 本项目继续**双发对冲** |
+
+### 14.3 顺带反转的旧结论（本轮实测推翻，不是升级猜测）
+
+1. **`--wf-*` 不是宿主令牌** —— 本仓库旧文档写反了。实测：`--wf-` 在 0.8.7 CSS / 0.8.8 CSS / 0.8.8 JS /
+   exe **全部 0 命中**；而官方手册 §7/§8 的 `--surface-*` / `--status-*` / `--radius-*` / `--text-*` /
+   `--color-*` **就是宿主真值**（逐 token 两版计数见 `plugin-manual-digest.md` §9）。
+   `--wf-*` 是**本工具链自己的私有前缀**（`build_skins.py` `token_block()` :352 写入并镜像 `--theme-*`）。
+2. **宿主有全局重置** —— 旧文档断言「宿主没有全局 `*{box-sizing:border-box}`」是**错的**。两版逐字节相同、
+   顶层（brace-depth 0、不在任何 `@media`/`@layer` 里），0.8.8 @ **11256**：
+   `*{box-sizing:border-box;margin:0;padding:0;user-select:none;-webkit-user-select:none}`。
+   于是 `.mini-drawer-root` 不加 `border` 的**真正理由**是它纵向余量只剩 11px（`pitfalls.md` #26），
+   描边要用 `box-shadow: inset 0 0 0 1px`（本项目 `--wf-window-stroke`）。
+3. **`--theme-*` / `--accent-*` 不在 `:root`** —— 它们声明在**主题选择器**上
+   （`:root,[data-theme=cyber]{` 24+24、`[data-theme=mono]{` 24+24、
+   `.mini-drawer-root[data-theme=mono|cyber]{` 24+0），两版完全一致。
+   六个槽位名 `pwr/gpu/hz/lux/kbd/bat` 一个都不能删：**JS 按名字取值**
+   （`style:{color:"var(--theme-bat)"}`、`background:"var(--theme-bat-dim)"`…共 18 个 `--theme-*` 名）。
+4. **0.8.8 内联样式大幅瘦身** —— `.acrylic-container` 的 `width/height/display/flexDirection` 与
+   `.mini-drawer-root` 的 `background/backdropFilter/color/fontFamily` **内联全部删掉**，改由
+   `.openrevo-shell` / `.mini-drawer-root` 规则承担（新 JS 里 `rgba(12,15,22,.96)` / `blur(28px)` 命中 0）。
+   ⇒ 0.8.8 下压背景**不再需要 `!important`**；但本插件 `.mini-drawer-root.mini-drawer-root` = (0,2,0)
+   **同时**打赢两版（`!important` 压 0.8.7 内联，特异性压 0.8.8 规则），所以**一套模板通吃、不必分叉**。
+5. **`.acrylic-container` 与 `.openrevo-shell` 是同一个元素**（根 div 两个类都在），
+   `.shell-navbar` 与 `.sub-nav-bar` 是**外层/内层两个元素**（`sub-nav-wrapper shell-navbar` 包着
+   `sub-nav-bar`）。四套皮肤依赖的四个锚点（`.acrylic-container` / `.mech-titlebar` / `.sub-nav-bar` /
+   `.mini-drawer-root`）**全部照旧渲染**，选择器集合只增不减（旧 362 → 新 399，**消失的为空**）。
+
+### 14.4 本轮落地
+
+* 新增对照件 `reference/plugin-dev-0.8.8-skill.md`（8 节，含给本仓库的 8 条动作清单，第 8 项待办）；
+* 反转 `plugin-manual-digest.md` §8/§9/§10、`OpenRevo_第三方插件开发手册.md` 头部注、`SKILL.md` 硬约束、
+  `README.md` §10/§11、`docs/README.md`、`pitfalls.md` #7/#22、`background-plugin.md` §0/§0.1/§0.2/§1/§2、
+  `real-machine-verification.md` §2、`environment-and-tools.md`；
+* 新装 `reference/plugin-dev-0.8.8-skill.md` 已被 `docs/README.md` 文件树收录。
+* **未做（下一轮）**：把 `bg-custom` 从 `plugin_type:"skin"` 改造成 `"background"` 形态 ——
+  这才是「背景与皮肤同时生效」真正落地的那一步。改造后 `manifest.json` 要带
+  `"plugin_type":"background"` + `"background_css"`，CSS 选择器前缀可去掉 `[data-skin]`，
+  背景段模板与 `verify-bg.sh` 的断言口径需同步调整。

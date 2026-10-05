@@ -4,11 +4,12 @@
 让 OpenRevo 主控制台变成 WinUI / Fluent Design 的原生 Windows 观感（Mica 材质、Fluent 控件、Segoe UI Variable 字体）。
 
 > **已经装好了。** 四套皮肤已安装到 `C:\Users\LIPis\AppData\Roaming\OpenRevo\plugins\`，
-> 打开 OpenRevo 主界面 → 【插件】选项卡 → 右上角【刷新】→ 拨动开关即可激活（皮肤互斥，同时只能启用一套）。
+> 打开 OpenRevo 主界面 → 【插件】选项卡 → 右上角【刷新】→ 拨动开关即可激活（四套皮肤之间互斥，同时只能启用一套）。
 
 另有一个**独立于皮肤**的插件 `bg-custom`：只把一张本地图片铺成窗口背景，不改配色与布局（见 **§11**）。
-它与本套 Fluent 皮肤**没有依赖关系**，但**在宿主层面互斥** —— 宿主只有一条 CSS 注入通道
-（`active_skin` 单值），所以「皮肤 + 背景」要同时生效只能给皮肤派生一个 `<id>-bg`，见 §11.3。
+它与本套 Fluent 皮肤**没有依赖关系**。⚠️ **0.8.7 时代它在宿主层面与皮肤互斥**（只有一条 CSS 注入通道、
+`active_skin` 单值）；**0.8.8 起宿主新增 `plugin_type:"background"` 的第二条通道，两者可同时启用**
+（详见 §11.3）。本仓库当前产物仍是 `plugin_type:"skin"` 形态，所以「装上会顶掉皮肤」在**改造前**依然成立。
 
 ---
 
@@ -100,7 +101,8 @@ C:\Users\LIPis\AppData\Roaming\OpenRevo\plugins\
   改写它必须在**宿主停机时**做 —— 宿主运行中会把 `config.json` 按内存里的旧值整份覆盖回去
   （2026-10-04 10:13:06 实测：改写后约 6 分钟被覆盖，同一秒落盘的 `models.json` 可佐证是宿主写的）。
   正确流程：提权停宿主 → 改 `active_skin` 为 `skin-win11-dark` → 启宿主。
-  宿主只在启动时枚举插件目录，所以**改完必须重启宿主才认新 ID**。
+  宿主只在启动时枚举插件目录，所以**改完必须重启宿主才认新 ID**（0.8.8 起插件列表可点【刷新】重扫，
+  但 `active_skin` 指向已删 ID 这种残局仍必须停机改配置 + 重启，见 §11.2、`pitfalls.md` #37）。
 
 ## 3. 本地预览（不装、不改宿主也能看效果）
 
@@ -332,7 +334,7 @@ bash _tools/verify-bg.sh off                              # 停用后的零泄�
 > * `file://` 页面里跨文档样式表的 `cssRules` 会抛 SecurityError（规则数误报 `none`），要加 `--allow-file-access-from-files`。
 > * 别用“数某个灰色的像素个数”判断透明度：文字抗锯齿会撞上背景色，必须用**换底色差分**。
 > * `?bare=1` 里 `.pv-stage` 的内联 `width/height` 必须用 `!important` 覆盖，否则窗口填不满视口，截图底部会留一条页面底色带（曾把这条带误判成“窗口漏色”）。
-> * **宿主只在启动时枚举插件目录**：装完皮肤不重启宿主，跑着的旧进程里根本没有这套皮肤（当时 `pid 13128` 启动于 16:24，
+> * **宿主只在启动时枚举插件目录**（0.8.7 时如此；0.8.8 起插件页【刷新】可重扫列表）：装完皮肤不重启宿主，跑着的旧进程里根本没有这套皮肤（当时 `pid 13128` 启动于 16:24，
 >   而插件文件是 18:30 写的），截图像素自然会误导成“皮肤没生效”。判断真机状态前先比 `_tools\when.ps1`（进程启动时间）
 >   与插件目录 mtime。重启要用提权路径 `_tools\kill-and-start.ps1`（`taskkill` 对这个 requireAdministrator 进程是「拒绝访问」）。
 > * **判读真机截图前必须先确认窗口 z 序与遮挡**：第一次抓到的 615×916 图里左侧 45% 是一条纯 `(34,34,34)` 竖带，
@@ -380,12 +382,13 @@ bash _tools/verify-bg.sh off                              # 停用后的零泄�
 * 历史上为拿调试端口试过的 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9333`
   这条路**已被证伪**（Tauri/wry 会覆盖 WebView2 的启动参数，端口不会打开），该 `HKCU\Environment` 变量**已删除**；
   同理 `_tools\cdp.py`、`_tools\relaunch-debug.ps1`、`_tools\scan_ebwebview.py` 只是留档，不再是工作路径。
-* **背景插件：功能已做完并验收，但按 m00785「既然已知不行那就先不做」，刻意不装、不激活。**
-  `bg-custom\` 在仓库里已构建好、随时可用，卡点不是代码而是**宿主只给了一条 CSS 通道**：
-  启用背景插件必然顶掉你当前的 `skin-win11-dark`（原因见 §11.3），这是宿主侧的设计限制，
-  本插件绕不过去。因此**保持现状**：仓库内三档验收全绿，宿主侧零改动。
-  等 OpenRevo 官方开放接口后再接着做 —— 需要的接口见 §11.4。
-  在开放之前若想先看看真实观感，可以自己手动装（**会顶掉现有皮肤**）：
+* **背景插件：功能已做完并验收；0.8.8 起宿主侧卡点已解除，但仍按 m00785 的口径没有装进宿主。**
+  `bg-custom\` 在仓库里已构建好、随时可用。原卡点是**宿主只给了一条 CSS 通道**，启用背景必然顶掉
+  你当前的 `skin-win11-dark`（原因见 §11.3）；**OpenRevo 0.8.8 已新增第二条独立通道
+  `active_background`**（`<style id="openrevo-custom-background">`），皮肤与背景从此可以共存 ——
+  详见 §11.4 与 [`docs/reference/plugin-dev-0.8.8-skill.md`](docs/reference/plugin-dev-0.8.8-skill.md)。
+  当前仍**保持现状**：仓库内三档验收全绿，宿主侧零改动（没装、没激活）。
+  想先看看真实观感可以自己手动装（**0.8.8 下不再需要顶掉现有皮肤**）：
 
   ```bash
   python build_background.py install --activate     # 换成你自己的图就加 --image D:\pics\wall.jpg
@@ -398,15 +401,15 @@ bash _tools/verify-bg.sh off                              # 停用后的零泄�
 
 把一个本地图片文件铺成窗口背景。**它跟上面四套皮肤没有依赖关系**，就是一个单独的插件。
 
-> **当前状态：已实现、已验收，但按 m00785「既然已知不行那就先不做」而没有装进宿主** ——
-> 卡点是宿主的单 CSS 通道（§11.3），不是代码。下面写的命令全部可用，只是默认不执行 §11.2 的安装那步；
-> 需要的宿主接口见 §11.4。
+> **当前状态：已实现、已验收；0.8.8 起宿主侧卡点已解除，但仍按 m00785「既然已知不行那就先不做」没有装进宿主** ——
+> 原卡点是宿主的单 CSS 通道（§11.3），0.8.8 新增了第二条独立通道 `active_background`，见 §11.4。
+> 下面写的命令全部可用，只是默认不执行 §11.2 的安装那步。
 
 ```bash
 python build_background.py set --image D:\pics\wall.jpg      # 指定图片并构建（默认只出 bg-custom）
 python build_background.py set --image wall.jpg --fit cover --position center --overlay 0.42
 python build_background.py set --image wall.jpg --blur 12 --scope mini   # 只糊迷你面板
-python build_background.py install --activate                # 同步到 plugins\ 并切 active_skin（⚠️ 会顶掉现有皮肤，见 §11.4）
+python build_background.py install --activate                # 同步到 plugins\ 并切 active_background（0.8.8 起与皮肤互不干扰，见 §11.4）
 python build_background.py status                            # 看配置 / 产物 sha1 / 装没装
 python build_background.py off                               # 停用并删除产物
 ```
@@ -422,14 +425,27 @@ python build_background.py off                               # 停用并删除�
 | `--scope` | `both` | `both` / `main` / `mini` |
 | `--targets` | `none` | 见 §11.3 |
 
-**为什么图片是 base64 内联的**：宿主把 `theme.css` 整份读进 `<style id="openrevo-custom-skin">`，
-`@import` 和相对 `url()` 都按宿主文档的 base URL（`tauri://`）解析、够不到插件目录，`file://` 又被 WebView2 拒。
-所以图片必须编码成 `data:` URI —— 2560×1440 的 q88 JPEG 约 133 KB，`bg-custom\theme.css` 因此有 139 KB。
+**为什么图片是 base64 内联的**：宿主把 CSS 整份读进 `<style>` 再设 `textContent`
+（0.8.8 是 `<style id="openrevo-custom-background">`），`@import` 和相对 `url()` 都按宿主文档的 base URL
+（`tauri://`）解析、够不到插件目录，`file://` 又被 WebView2 拒。所以本插件自己把图片编码成 `data:` URI ——
+2560×1440 的 q88 JPEG 约 133 KB，`bg-custom\theme.css` 因此有 139 KB。
 配置里**只存源图路径**，每次构建重新编码，换参数不会退化成二次压缩。
+
+> **0.8.8 起不必再手写 base64**：宿主新增 Background Engine —— 插件目录只放 `manifest.json` + 一张图
+> （候选文件名：`background.{jpg,jpeg,png,webp}` / `wallpaper.*` / `bg.*`，大小写不敏感），
+> 宿主自己读图、base64 化，并生成覆盖 `.openrevo-shell` / `.mini-drawer-root` 的样式，作者零代码。
+> 另一条路仍是 `plugin_type: "background"` + `background_css` 指向自己写的 CSS。两条路都没试装。
+> ⚠️ 作者手写 CSS 里的相对 `url("assets/x.png")` **是否被宿主自动改写为 Data URI 尚无证据**
+> （exe 里没有对应的重写代码痕迹），按「不会被改写」处理。见
+> [`docs/reference/plugin-dev-0.8.8-skill.md`](docs/reference/plugin-dev-0.8.8-skill.md) §2/§3。
 
 **画在哪**：面板根（主窗 `.acrylic-container`、迷你 `.mini-drawer-root`），选择器把类名写两遍抬到 (0,3,0)，
 才压得过皮肤的 `!important` 与宿主给迷你的内联 `background`。遮罩和照片写在**同一个** `background-image` 里
 （第 0 层遮罩、第 1 层照片），所以不需要伪元素或 z-index；图片解码失败时会自动回落到 `background-color`。
+
+> **0.8.8 兼容性**：0.8.8 把 `.acrylic-container` 与新的 `.openrevo-shell` 渲染在**同一个元素**上
+> （`className:"acrylic-container openrevo-shell"`），`.mini-drawer-root` 照旧，所以现有选择器无需改动。
+> 宿主自带的 Engine 生成版用的是 `.openrevo-shell` / `.mini-drawer-root`，比本插件更宽的锚点。
 
 ### 11.1 验收
 
@@ -443,41 +459,58 @@ bash _tools/verify-bg.sh off      # 停用后：产物已删 + 没有背景图�
 `bg.image.loaded = true <W>x<H>`：预览页会**真起一个 `new Image()` 解码**，再把尺寸与 PIL 读出的产物比对。
 期望值每轮都从 `bg.config.json` 重新推导，不抄产物。
 
-### 11.2 装完要重启
+### 11.2 装完要重启（0.8.8 起可免）
 
-宿主**只在启动时枚举插件目录**，所以 `--install` 之后必须重启宿主才认；重启用
-`powershell -ExecutionPolicy Bypass -File _tools\kill-and-start.ps1`（需要提权，`taskkill` 会被拒）。
-`--activate` 会调 `_tools\set-active-skin.ps1`，它按「停机 → 改 config → 启动」的顺序做，
-因为宿主运行中会周期性把 `config.json` 整份回写。
+0.8.7 时代宿主**只在启动时枚举插件目录**，`--install` 之后必须重启宿主才认。**0.8.8 已改为按需注入**：
+皮肤 / 背景 CSS 都在 `useCallback` 里即时 `load_plugin_*_css`，所以在插件页**拨一次开关**即可生效；
+只改已有 CSS 也是关/开一次开关。注意【刷新】按钮**只重扫插件列表**（`invoke('get_custom_plugins')`），
+不负责重新注入 CSS —— 新装目录的流程是「先【刷新】让列表出现，再拨开关」。
 
-### 11.3 与皮肤互斥（宿主设计，不是本插件的取舍）
+重启仍是最稳的兜底路径：`powershell -ExecutionPolicy Bypass -File _tools\kill-and-start.ps1`
+（需要提权，`taskkill` 会被拒）。`--activate` 会调 `_tools\set-active-skin.ps1`，它按「停机 → 改 config → 启动」
+的顺序做，因为宿主运行中会周期性把 `config.json` 整份回写。
 
-宿主全树只有**一条** CSS 注入通道：`<style id="openrevo-custom-skin">`，内容来自 `load_plugin_theme_css`。
-插件页切皮肤时，`plugin_type === "skin"` 的插件走 `set_active_skin` 且**单选**（同一时刻只有一套），
-而非 skin 插件走 `set_custom_plugin_enabled`、**永远不注入 CSS**。所以背景只能做成 `skin` 形态，
-于是必然占用唯一的 `active_skin` 槽位 —— **启用背景插件就会顶掉你的 Fluent 皮肤，反之亦然。**
+### 11.3 与皮肤的关系（0.8.7 互斥 → 0.8.8 解耦）
 
-要「皮肤 + 背景」同时生效，只有把两层 CSS 合并进同一份 `theme.css`：
+**0.8.7**：宿主全树只有**一条** CSS 注入通道 `<style id="openrevo-custom-skin">`，内容来自
+`load_plugin_theme_css`。插件页切皮肤时 `plugin_type === "skin"` 走 `set_active_skin` 且**单选**，
+非 skin 插件走 `set_custom_plugin_enabled`、**永远不注入 CSS**。所以背景当时只能做成 `skin` 形态，
+必然占用唯一的 `active_skin` 槽位 —— **启用背景插件就会顶掉 Fluent 皮肤，反之亦然**。那是宿主侧的设计，
+不是本插件的取舍。当时的替代方案是把两层 CSS 合并进同一份 `theme.css`：
 
 ```bash
 python build_background.py set --image wall.jpg --targets skin-win11-dark   # 产出 skin-win11-dark-bg
 ```
 
-这会额外生成派生皮肤 `skin-win11-dark-bg\`（= 原皮肤逐行相同 + 末尾 3 条背景规则），
-原四套皮肤一个字节都不动。默认不生成，因为按用户口径背景插件应当与皮肤解耦。
+这会额外生成派生皮肤 `skin-win11-dark-bg\`（= 原皮肤逐行相同 + 末尾 3 条背景规则），原四套皮肤一个字节不动。
 
-### 11.4 卡在哪：需要宿主开放什么（m00785 后暂停在这里）
+**0.8.8**：宿主新增**第二条独立通道**。皮肤与背景各有自己的槽位、各自注入自己的 `<style>`，互不覆盖：
 
-按上面的结论，背景插件**已经做完并三档验收全绿**，剩下的不是我们这边的活，而是宿主侧缺接口。
-当前状态是**先不装、不激活**，等开发者开放下列任一种能力即可解除互斥、恢复「皮肤照用 + 背景照铺」：
-
-| # | 需要宿主开放的能力 | 解除后能做什么 | 为什么现在做不到 |
+| 槽位 | 状态键 | 注入点 | 拉取命令 |
 |---|---|---|---|
-| 1 | **第二条 CSS 注入通道**：按 `plugin_type` 分别注入，让 `skin` 之外的形态（`widget` / `shell`，或新增 `background`）也能往 `<style>` 里写样式 | 背景做成非 skin 插件，与皮肤各占一个槽位，真正同时生效 | 全树只有 `<style id="openrevo-custom-skin">` 一处注入点，且只由 `load_plugin_theme_css` 服务 `active_skin` |
-| 2 | **`active_skin` 分槽 / 多值**：允许一个「皮肤槽」+ 一个「背景槽」同时 `enabled` | 同样是共存，且不必新增插件类型 | 宿主切换逻辑写死 `enabled: T.id === D`（单选），同一时刻只认一套 `skin` 插件 |
-| 3 | **原生背景图配置键**：`config.json` 或 API 直接接受背景图（含 fit / 遮罩 / 模糊） | 背景彻底不必走 CSS，皮肤随便换 | exe 里 `background_image|backgroundImage|wallpaper|bg_image` 命中 0，config 无任何背景键 |
+| 皮肤 | `active_skin` | `<style id="openrevo-theme-skin">`（读旧 id `openrevo-custom-skin` 会就地改名） | `load_plugin_theme_css` |
+| 背景 | `active_background` | `<style id="openrevo-custom-background">` | `load_plugin_background_css` |
 
-三者取其一即可。在开放之前，本仓库里的东西都是可运行的完整实现（`--targets <skin_id>` 的派生皮肤
-就是当前的替代方案），只是**默认不装进宿主**。仓库侧不需要任何改动即可切换口径，重启宿主即可生效。
+`plugin_type === "background"` 是宿主真分支：`if(j.plugin_type==="background"){const T=o===j.id?null:j.id;…}`
+插件卡片徽标文案也随之分开（实测四个标签：`skin`→「主窗皮肤」、`background`→「背景壁纸」、
+`tab`→「面板插槽」、`widget`→「桌面挂件」）。所以派生皮肤 `--targets` 那条路**不必再走**，
+但保留着（对 0.8.7 宿主仍是唯一解）。
+
+### 11.4 卡点已在 0.8.8 解除
+
+原文这一节列了三选一的宿主接口需求。**0.8.8 三项已全部满足**，其中第 1 项是宿主的正解、
+第 2/3 项由同一机制一并解决：
+
+| # | 原需求 | 0.8.8 落地情况 |
+|---|---|---|
+| 1 | 第二条 CSS 注入通道（让 `skin` 之外的形态也能写样式） | ✅ **已实现**：新增 `plugin_type === "background"` + `active_background` + `load_plugin_background_css` + `<style id="openrevo-custom-background">` |
+| 2 | `active_skin` 分槽 / 多值 | ✅ **等效达成**：不需要给 `active_skin` 分槽 —— 背景改由独立键 `active_background` 承载，两槽天然共存（`config.json` 里两个键并存） |
+| 3 | 原生背景图配置键 | ✅ **等效达成**：宿主新增 Background Engine —— 插件目录里只放 `manifest.json` + 一张图（12 个候选文件名之一）即可，宿主自己 base64 化并生成覆盖 `.openrevo-shell` / `.mini-drawer-root` 的样式，作者**零代码** |
+
+**因此本仓库的 `bg-custom` 还是按 m00785 保持「不装、不激活」，但性质变了**：不再是「宿主不支持、
+只能等」，而是「宿主已支持、只是用户口径选择先不装」。要启用，改成 `plugin_type: "background"`
+形态即可（见 `docs/reference/plugin-dev-0.8.8-skill.md` §7 第 8 项与 §3）。
+
+细节（含探针字段、已知坑、文件清单、退回原状）见 [`docs/reference/background-plugin.md`](docs/reference/background-plugin.md)。
 
 细节（含探针字段、已知坑、文件清单、退回原状）见 [`docs/reference/background-plugin.md`](docs/reference/background-plugin.md)。

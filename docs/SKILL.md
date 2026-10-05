@@ -24,7 +24,7 @@ cd <项目根目录>
 python build_skins.py --install      # 生成 + 安装四套皮肤到 %APPDATA%\OpenRevo\plugins\
 bash _tools/verify.sh                # 验收总闸：重跑两页审计 + 逐条断言（132 条），全绿才算过
 bash _tools/audit.sh                 # 无头 Chrome 跑四套变体的 computedStyle 审计 → _audit\<id>.audit.txt
-# 装完必须重启宿主（宿主只在启动时枚举插件目录），走提权脚本：
+# 让宿主认到新插件目录：0.8.7 必须重启（只在启动时枚举）；0.8.8 起可改为【刷新】+ 拨开关。重启走提权脚本：
 powershell -NoProfile -Command "Start-Process powershell -Verb RunAs -WindowStyle Hidden -Wait -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','<项目根目录>\_tools\kill-and-start.ps1'"
 ```
 
@@ -47,8 +47,11 @@ powershell -NoProfile -Command "Start-Process powershell -Verb RunAs -WindowStyl
 
 **手册 ≠ 发行版**（7 条对照表在 `reference/plugin-manual-digest.md` §10；最要紧的三条）：手册 §7 示例的
 `.overview-main-grid` / `.sensor-gauge-cluster` / `.cooling-fan-card` / `.power-mode-selector` 在发行版里**不存在**；
-手册的 `--core-*` / `--surface-*` / `--status-*` 令牌也不存在（真值是 `--wf-*` 一套）；
-手册说「插件页点刷新即热加载」——**皮肤必须重启宿主**。
+手册的 `--core-*` 令牌也不存在，但 `--surface-*` / `--status-*` / `--radius-*` **就是宿主真值**
+（`--wf-*` 是本工具链私有前缀，不是宿主令牌，见 `reference/plugin-dev-0.8.8-skill.md` §5.2）；
+手册说「插件页点刷新即热加载」——**0.8.8 起 CSS 是按需注入**（拨开关即重注入），【刷新】只重扫插件列表；
+装新插件目录仍需「刷新 + 拨开关」。**0.8.8 新增背景壁纸通道 `active_background`**
+（`<style id="openrevo-custom-background">`），与皮肤槽位正交可共存 —— 见 `reference/plugin-dev-0.8.8-skill.md`。
 
 ## 动手前必读的硬约束
 
@@ -67,9 +70,12 @@ powershell -NoProfile -Command "Start-Process powershell -Verb RunAs -WindowStyl
    `[data-theme=mono|cyber] .mini-drawer-root` 上**重新声明**整套 `--theme-*`，所以皮肤必须在
    `[data-skin="<id>"] .mini-drawer-root[data-theme]`（0,3,0）这一层再声明一遍，并读**镜像变量** `--wf-hue-*`。
    六个槽位名 `pwr/gpu/hz/lux/kbd/bat` **一个都不能删**（宿主 mini 内联样式按名字取值），只能改它们的**取值**。
-6. **宿主没有全局 `*{box-sizing:border-box}`** → 需要就自己写；**永远不要**给 `.mini-drawer-root` 加 `border`。
-7. **宿主只在启动时枚举插件目录**：装完不重启，旧进程里根本没有新皮肤（先比 `_tools\when.ps1` 的进程启动时间
-   与插件目录 mtime）。宿主进程是 `requireAdministrator`，`taskkill` 会被拒 → 用提权 `_tools\kill-and-start.ps1`。
+6. **宿主有全局重置** `*{box-sizing:border-box;margin:0;padding:0;user-select:none}`（0.8.7/0.8.8 都在，紧跟 `:root`）
+   → 不用自己再声明；**永远不要**给 `.mini-drawer-root` 加 `border`（理由不是 box-sizing，而是它纵向余量只剩 11px，描边请用 `box-shadow: inset`）。
+7. **宿主认新插件目录的时机**：0.8.7 只在启动时枚举一次（装完不重启，旧进程里根本没有新皮肤，先比
+   `_tools\when.ps1` 的进程启动时间与插件目录 mtime）；**0.8.8 起插件页【刷新】可重扫列表**（但仍不重注入
+   已激活插件的 CSS，改 `theme.css` 要关/开一次开关）。宿主进程是 `requireAdministrator`，`taskkill` 会被拒
+   → 用提权 `_tools\kill-and-start.ps1`。
    若 `active_skin` 指向的是**已被删掉的旧 ID**（换 ID / 改名的常见残局），光重启不够——宿主只在启动时读一次，
    而且**运行中会周期性整份回写 config**，所以顺序必须「停 → 改 → 启」，用 `_tools\set-active-skin.ps1`（见 pitfalls #37）。
 8. **本机模型不支持图片输入**（`read_image` 报 `does not declare image input`）：所有观感判读只能靠
@@ -162,17 +168,22 @@ docs\
 * **配色已收敛为二色体系**：迷你面板色相族 6 → 2，主控台 2 族（accent + 状态点绿）。
   验收 = `bash _tools/verify.sh` **132 条断言全绿**（`exit 0` 才算过）；曾有的偶发竞态（并发下 ≈17%）
   已由 `preview-mini.html` 的 `settleStyle()` 收口，`settle.remounts = 1` 是正向证据之一。
-* **自定义背景已交付**（2026-10-04 续，**独立插件** `bg-custom`，与 win skin 无耦合）：宿主本身没有任何背景图能力
-  （exe 里 `background_image|backgroundImage|wallpaper|bg_image` 命中 0、config 无此键），背景只能由
-  插件注入的 `theme.css` 承载。宿主全树只有一处 CSS 注入点（`<style id="openrevo-custom-skin">` ←
-  `load_plugin_theme_css`），而 `active_skin` 是**单值**、非 skin 插件走 `set_custom_plugin_enabled` 永不注入
-  CSS ⇒ **背景插件与 Fluent 皮肤在宿主层面互斥** —— 这是宿主的设计，不是本插件的取舍。图片内联 base64
+* **自定义背景已交付**（2026-10-04 续，**独立插件** `bg-custom`，与 win skin 无耦合）：图片内联 base64
   `data:` URI、遮罩与照片同层叠（层数恒为 2）。默认产物 = `bg-custom`（宿主默认 UI 专用，17 条断言）；
   `<id>-bg` 派生皮肤（皮肤 + 背景同份 theme.css）降级为 `--targets` 显式开启的可选导出。
   验收 = `bash _tools/verify-bg.sh`（默认 18 / 派生 68 / off 10~18 条，按配置推导）；配置真值 = `bg.config.json`，
   命令行 = `build_background.py`；细节见 `reference/background-plugin.md`。
+  历史约束（**0.8.7**）：宿主本身没有任何背景图能力（exe 里 `background_image|backgroundImage|wallpaper|bg_image`
+  命中 0、config 无此键），背景只能由插件注入的 `theme.css` 承载；全树只有一处 CSS 注入点
+  （`<style id="openrevo-custom-skin">` ← `load_plugin_theme_css`），而 `active_skin` 是**单值** ⇒
+  那时**背景插件与 Fluent 皮肤在宿主层面互斥**。
+  **✅ 0.8.8 已解除**：宿主新增 `plugin_type:"background"` + `active_background` 独立槽位 →
+  `<style id="openrevo-custom-background">`，与皮肤的 `active_skin` → `<style id="openrevo-theme-skin">`
+  可同时启用；另有 Background Engine 零代码壁纸（只放 manifest + 固定文件名的图）。
+  核查件见 `reference/plugin-dev-0.8.8-skill.md`（本轮逐条实测，含 3 处「skill 写了但宿主没有」的更正）。
   **⚠️ 按用户口径 m00785「既然已知不行那就先不做」，它刻意没装进宿主、也没激活**（宿主侧零改动，
-  `active_skin` 仍是 `skin-win11-dark`）；等 OpenRevo 开放接口，需要的接口见根 `README.md` §11.4。
+  `active_skin` 仍是 `skin-win11-dark`）；0.8.8 虽已解除卡点，但本仓库产物仍是 `plugin_type:"skin"` 形态，
+  改造前装上仍会顶掉皮肤 —— 改造清单见 `reference/plugin-dev-0.8.8-skill.md` §7 第 8 项。
 * 真机取证的重要结论：**截图不能判别「换肤是否生效」** —— 改名前后 `theme.css` 逐字节同源，像素必然一样；
   招牌色也不能当正控（精确命中 0 px）。详见 `reference/real-machine-verification.md` §9。
 * 已知残留（不影响「侧栏 + 不透明」两条结论）：迷你面板底部有一条细横向滚动条（宿主自身内容 **410×621** CSS > 窗口 610，

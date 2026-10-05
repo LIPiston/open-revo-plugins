@@ -110,6 +110,7 @@ OpenRevo = **笔记本硬件微内核平台**：Rust Core（Ring0 ACPI、同方/
 
 1. **统一目录规范**：严禁另开 `skins\` 文件夹，皮肤一律放 `plugins\<skin_id>\`，在插件管理页享受统一启闭/版本/元数据治理。
 2. **物理级 0 内存开销**：不建独立 Webview，只把 `theme.css` 文本注入宿主主窗口的 `<style id="openrevo-custom-skin">`，0ms 热装卸。
+   → **0.8.8 起注入点改名为 `<style id="openrevo-theme-skin">`**（启动时仍兼容读旧 id：`document.getElementById("openrevo-theme-skin")||document.getElementById("openrevo-custom-skin")`，读到旧 id 会**就地改名为新 id**）；同时**新增**背景壁纸通道 `<style id="openrevo-custom-background">`（见 `plugin-dev-0.8.8-skill.md` §1）。
 3. **互斥安全激活**：同时只允许一个第三方皮肤；激活新的自动卸载旧的，停用即刻无缝回退默认主题与 960×740 视窗基准。
 
 **目录与清单**：`manifest.json` + `theme.css`（+ `assets\`）；清单用 `plugin_type: "skin"`、`theme_css: "theme.css"`、`window.{width,height,resizable}`。
@@ -118,12 +119,15 @@ OpenRevo = **笔记本硬件微内核平台**：Rust Core（Ring0 ACPI、同方/
 
 **原文承诺的调试流程**：拷进插件目录 → 打开【插件】页 → 点【刷新】→ 拨开关 → CSS 热注入 + 视窗尺寸平滑拉伸到 `window` 声明值并居中。
 
-> 发行版实际行为有三处不同（**必须重启宿主**、令牌名不同、示例类名不存在）—— 见 §10 与 `skin-authoring.md`。
+> 发行版实际行为有几处不同（令牌名、示例类名、热加载口径）—— 见 §10 与 `skin-authoring.md`。
+> **0.8.8 更新**：原文承诺的「拷进目录 → 点【刷新】→ 拨开关」流程**基本成立**了 —— CSS 已改为按需注入
+> （`useCallback` 内 `load_plugin_theme_css` / `load_plugin_background_css`），拨开关即重新注入；
+> 只是【刷新】按钮本身**只重扫插件列表**，不负责重新注入 CSS。见 `plugin-dev-0.8.8-skill.md` §4。
 
 ## 9. Design Tokens 与安全模式（原文 §8 / §9）
 
-* 原文令牌（**发行版没有这一套，别用**）：`--surface-card`、`--border-medium`、`--status-ok`、`--status-info`、`--color-beast`、`--radius-md`(8px)、`--radius-lg`(12px)；要求禁死板十六进制裸色；两套主题 `cyber`（多彩）与 `mono`（黑白工业）。
-  → 发行版真值是 `--wf-*` / `--text-*` / `--accent-*`（`host-truth-extraction.md` §5），本项目在其上加**二色纪律**：只有 `--wf-accent` + `--wf-important`（`skin-authoring.md` §3.1）。
+* 原文令牌（`--surface-card`、`--border-medium`、`--status-ok`、`--status-info`、`--color-beast`、`--radius-md`(8px)、`--radius-lg`(12px)）—— **⚠️ 原判「发行版没有这一套」是错的，已按 0.8.8 实测反转**：这些令牌在 0.8.7 与 0.8.8 的宿主 `:root` 里**全部存在**且取值一致（`--surface-card` 7/8 次、`--border-medium` 15/16、`--status-ok` 2/2、`--status-info` 6/6、`--color-beast` 1/1、`--radius-md` 11/12、`--radius-lg` 6/7），即**它们就是宿主真值**。真正不存在的是 `--core-*`（0/0）与 `--mica-*`（0/0）。
+  → 完整令牌面见 `host-truth-extraction.md` §5 与 `plugin-dev-0.8.8-skill.md` §5.2。**`--wf-*` 不是宿主令牌**（old-css / new-css / new-js / exe 全 0），它是本工具链的**私有前缀**（`build_skins.py:352` 把色写进宿主 `--theme-<key>{,-border,-dim,-glow}` 后镜像成 `--wf-hue-<key>*`）；本项目在其上加**二色纪律**：只有 `--wf-accent` + `--wf-important`（`skin-authoring.md` §3.1）—— 这条约束是**我们自己的**，不是对宿主令牌名的主张。
 * **Safe Mode 二分法**：插件把宿主搞崩时**不要重装**。编辑 `%APPDATA%\OpenRevo\config.json` 的 `custom_plugin_toggles`，把嫌疑插件 ID 置 `false`，重启即跳过。
   本机实测该键真实存在（2026-10-04：`{"eva01-core": false}`）。
 
@@ -132,10 +136,10 @@ OpenRevo = **笔记本硬件微内核平台**：Rust Core（Ring0 ACPI、同方/
 | # | 手册说法（原文位置） | 发行版实测 | 证据 |
 |---|---|---|---|
 | 1 | 皮肤 CSS 用 `.overview-main-grid` / `.sensor-gauge-cluster` / `.cooling-fan-card` / `.power-mode-selector` 重排插槽（§7） | **这些类名在发行版里根本不存在**（WebView2 V8 代码缓存逐字检索命中 0），只能写前向兼容层 | `host-truth-extraction.md` §2、`devlog.md` §1 |
-| 2 | 复用 `--core-accent` / `--surface-*` / `--status-*` / `--radius-md` 等令牌（§7 §8） | 真值是 `--wf-*` 一套（`--wf-accent` / `--wf-important` / `--wf-ok` …），`--core-*` 全不存在 | `host-truth-extraction.md` §5 |
-| 3 | 各示例写 `"type": "widget"`（§7 用例 1/3/5） | 权威键是 **`plugin_type`** | exe Rust 明文字符串 `plugin_type` @6887819、`load_plugin_theme_css` @6923005 |
-| 4 | 插件页点【刷新】拨开关即热加载（§7 步骤 5） | **宿主只在启动时枚举插件目录**；装完不重启 = 皮肤不生效（皮肤 CSS 也是启动时注入） | `real-machine-verification.md` §2、`pitfalls.md` #33 一线 |
-| 5 | `data-skin` 挂「宿主根容器」（§7） | 挂在主控台主容器 / 迷你面板根上；`body` 上**没有**，需要 `body:has([data-skin=…])` 兜底手臂才覆盖得到 body 级浮层 | `host-truth-extraction.md` §4、`SKILL.md` 硬约束 3 |
+| 2 | 复用 `--core-accent` / `--surface-*` / `--status-*` / `--radius-md` 等令牌（§7 §8） | **⚠️ 已反转**：`--surface-*` / `--status-*` / `--radius-*` / `--text-*` / `--color-*` **就是宿主真值**（0.8.7/0.8.8 两份 `:root` 都在），只有 `--core-*` 与 `--mica-*` 全不存在；`--wf-*` 是**本工具链私有前缀**、不是宿主令牌 | `plugin-dev-0.8.8-skill.md` §5.2、`host-truth-extraction.md` §5；计数：`--surface-card` 7/8、`--status-ok` 2/2、`--core-` 0/0、`--wf-` 0/0 |
+| 3 | 各示例写 `"type": "widget"`（§7 用例 1/3/5） | 权威键是 **`plugin_type`**（`"type"` 带引号在 exe **0 命中**）；新 Skill §3 称二者「完全等价（Rust 配了 alias）」**未证实** → 本项目继续**双发对冲** | exe manifest 字段表 @6949111 只有 `plugin_type`；`plugin-dev-0.8.8-skill.md` §6 |
+| 4 | 插件页点【刷新】拨开关即热加载（§7 步骤 5） | ⚠️ **半对**：0.8.8 写 / 背景 CSS 是 `useCallback` 里**按需** `load_plugin_*_css` 注入（**不再只能靠重启**）；但【刷新】按钮确实**只重扫插件列表**（`invoke('get_custom_plugins')`），不重新注入 CSS。实操 = **新装目录：刷新列表 + 拨一次开关；只改已有 CSS：关/开一次开关** | `plugin-dev-0.8.8-skill.md` §4 |
+| 5 | `data-skin` 挂「宿主根容器」（§7） | **0.8.7**：只挂容器（主控台主容器 / 迷你面板根），`body` 上**没有** → 需要 `body:has([data-skin=…])` 兜底手臂才覆盖得到 body 级浮层；**0.8.8**：**同时**挂到 `document.documentElement`（`C?P.setAttribute("data-skin",C):P.removeAttribute("data-skin")`），本仓库皮肤的 `html[data-skin]` / `body[data-skin]` 手臂正好命中 | `host-truth-extraction.md` §4、`plugin-dev-0.8.8-skill.md` §5.3、`SKILL.md` 硬约束 3 |
 | 6 | 切皮肤时宿主自动按 `window` 平滑改主窗几何并居中（§7） | 主窗几何由宿主自己管（含被停车到 `(-32000,-32000)` 收成 237×39 的状态），皮肤侧只声明 `window.width/height` | `real-machine-verification.md` §3/§5 |
 | 7 | `custom_plugin_toggles` 改 `false` 即跳过插件（§9） | ✅ 成立（本机实测该键存在） | `config.json` 实读 |
 

@@ -5,30 +5,58 @@
 
 ## 0. 一个独立插件：`bg-custom`
 
-本插件就是**一个普通插件** `bg-custom`（`plugin_type: "skin"`），作用只有一个：把一张本地图片
-铺成 OpenRevo 的窗口背景。它不带任何皮肤令牌、不改宿主默认界面的配色与布局，
-**与 `skin-*` 那四套 win 皮肤没有任何依赖关系** —— 删掉 `skin-*/` 它照样能构建、照样能装。
+本插件就是**一个普通插件** `bg-custom`，作用只有一个：把一张本地图片铺成 OpenRevo 的窗口背景。
+它不带任何皮肤令牌、不改宿主默认界面的配色与布局，**与 `skin-*` 那四套 win 皮肤没有任何依赖关系**
+—— 删掉 `skin-*/` 它照样能构建、照样能装。
 
-但它有两个被宿主逼出来的、必须写在文档最前面的硬约束（取证过程见 `host-truth-extraction.md`）：
+> **0.8.8 起宿主开了第二条 CSS 通道**（完整取证见 `reference/plugin-dev-0.8.8-skill.md`）：
+> `plugin_type:"background"` 的插件走 `active_background` 槽位 →
+> `<style id="openrevo-custom-background">`，与皮肤的 `active_skin` →
+> `<style id="openrevo-theme-skin">` **互不干扰、可以同时启用**。
+> 下面 §0.0 的三条约束是 **0.8.7 的历史**，第 1、2 条已被 0.8.8 解除。
 
-1. **宿主没有任何背景图能力**：`open-revo.exe` 里 `background_image|backgroundImage|wallpaper|bg_image`
-   命中 0；`%APPDATA%\OpenRevo\config.json` 里没有任何背景相关键。→ 背景**只能**由皮肤插件的
-   `theme.css` 注入。
-2. **宿主只认一个 CSS 通道**：全树只有 `<style id="openrevo-custom-skin">` 一处注入点，内容来自
-   `load_plugin_theme_css({pluginId})`；而 `active_skin` **是单值**（宿主切换逻辑对 `plugin_type === "skin"`
-   的插件执行 `enabled: T.id === D`，非 skin 插件走 `set_custom_plugin_enabled`，永远不注入 CSS）。
-   → **背景插件与 Fluent 皮肤在宿主层面互斥，不能同时启用。** 这是宿主的设计，不是本插件的选择：
-   插件类型只有 `skin|tab|widget|service|shell` 五种，`shell` 是整窗替换主界面而非样式通道，
-   所以「能注入 CSS」的形态有且只有 `skin`，就必然占用那唯一的槽位。
+### 0.0 宿主硬约束（0.8.7 版；0.8.8 已解除前两条）
 
-第 3 条是自包含要求：**`theme.css` 必须自包含**：宿主把整份 CSS 文本塞进 `<style>`，不注入 base URL；
-`@import` / 相对 `url()` 都取不到插件目录里的图片，`file://` 在 `tauri://` origin 下会被 WebView2 拒。
-→ 图片必须内联成 **base64 `data:` URI**（exe 里只有 tauri 协议的 CSP 头名字、没有指令文本，`data:` 可用）。
+1. ~~**宿主没有任何背景图能力**~~ → **0.8.8 已解除**。0.8.7 时 `open-revo.exe` 里
+   `background_image|backgroundImage|wallpaper|bg_image` 命中 0、`config.json` 里没有任何背景相关键，
+   背景**只能**由皮肤插件的 `theme.css` 注入。0.8.8 新增 `active_background` 槽位 +
+   **Background Engine**（Rust 侧直接读插件目录里的图片文件并自己生成 Data URI），见 §0.1。
+2. ~~**宿主只认一个 CSS 通道**~~ → **0.8.8 已解除**。0.8.7 全树只有
+   `<style id="openrevo-custom-skin">` 一处注入点，内容来自 `load_plugin_theme_css({pluginId})`；
+   而 `active_skin` **是单值**（宿主切换逻辑对 `plugin_type === "skin"` 的插件执行
+   `enabled: T.id === D`，其他类型走 `set_custom_plugin_enabled`，永远不注入 CSS）。
+   → 那个版本里**背景插件与 Fluent 皮肤在宿主层面互斥**，这是宿主的设计、不是本插件的选择。
+   0.8.8 把它拆成两个独立槽位，互斥关系消失（插件卡片徽标分开：皮肤「主窗皮肤」/ 背景「背景壁纸」）。
+3. **`theme.css` 必须自包含** —— **这条仍然成立**：宿主把整份 CSS 文本塞进 `<style>`，不注入 base URL；
+   `@import` / 相对 `url()` 都取不到插件目录里的图片，`file://` 在 `tauri://` origin 下会被 WebView2 拒。
+   → 走 **`theme_css` 通道**时，图片必须内联成 **base64 `data:` URI**（exe 里只有 tauri 协议的 CSP 头名字、
+   没有指令文本，`data:` 可用）。
+   ⚠️ 0.8.8 的 `background` 通道有**零代码**替代路径（§0.1 路 A2），但
+   「作者在 CSS 里写相对 `url()`、Rust 帮忙改写成 Data URI」**没有任何证据** ——
+   `background_css` 里仍然得写内联 `data:` 或外链。
 
-### 0.1 那「皮肤 + 背景」同时要怎么办
+> 0.8.7 时还有一条推论：「插件类型只有 `skin|tab|widget|service|shell` 五种，`shell` 是整窗替换主界面
+> 而非样式通道，所以能注入 CSS 的形态有且只有 `skin`」。**该推论已作废**：0.8.8 前端里
+> `plugin_type` 的取值字面量只有 `background|skin|tab|widget` 四种（`service`/`shell`/`driver` 在 JS 里
+> 没有字面量，开发者 skill §2 的「七形态表」未获证实）。
 
-唯一可行的路是把两层 CSS 合并进**同一份** `theme.css`，即**派生皮肤** `<id>-bg`
-（= 原皮肤逐字节不动 + 末尾追加背景段）。它是**可选导出**，默认不生成：
+### 0.1 两条路：`background` 通道（0.8.8+）与派生皮肤
+
+**路 A（0.8.8+，宿主原生通道）** —— `plugin_type:"background"`，插件只提供背景，与皮肤**同时启用**。
+两种写法：
+
+* **A1 自带 CSS**：manifest 写 `"plugin_type":"background"` + `"background_css":"background.css"`，
+  CSS 里把背景铺在 `.openrevo-shell` 与 `.mini-drawer-root` 上。这条通道是**独立注入点**，
+  所以 CSS 里**不需要**再写 `[data-skin="…"]` 前缀，`html[data-skin]` 兜底手臂也不必加。
+* **A2 零代码 / 零 base64**：只放 `manifest.json` + 一张**固定文件名**的图
+  （`background|wallpaper|bg` × `.jpg/.jpeg/.png/.webp` 共 12 个，大小写不敏感，见
+  `plugin-dev-0.8.8-skill.md` §3）。Rust 侧 Background Engine 自己读文件、自己生成
+  `url("data:<mime>;base64,…")` 模板并注入 —— **不写一行 CSS、不存 base64**。
+  ⚠️ 开发者 skill §6 方式 B 写的 `"image":"wallpaper.jpg"` 键在 0.8.8 里**不存在**
+  （exe 里 0 命中，manifest 字段表里也没有 `image`）—— 别写；机制是**固定文件名探测**。
+
+**路 B（0.8.7 起可用，本仓库当前产物形态）** —— 把两层 CSS 合并进**同一份** `theme.css`，
+即**派生皮肤** `<id>-bg`（= 原皮肤逐字节不动 + 末尾追加背景段）。它是**可选导出**，默认不生成：
 
 ```bash
 python build_background.py set --image assets/sample-wallpaper.jpg --targets skin-win11-dark
@@ -42,11 +70,19 @@ python build_background.py set --image assets/sample-wallpaper.jpg --targets ski
 派生走的是**新 id 的新目录**，不是改原皮肤 —— 原四套皮肤的 132 条验收断言
 （含 `root.bgImage = none`、`container.alpha` 这类「不能有背景图」的正向断言）一个字都不用改。
 
-### 0.2 现状：做完了，但刻意不装（m00785）
+### 0.2 现状：做完了，仍按 m00785 刻意不装
 
-**这个插件已经实现完毕、三档验收全绿**，但**没有装进宿主、也没有激活**。原因不是代码有坑，
-而是上面第 2 条约束解不开：装上去就会顶掉用户当前的 `skin-win11-dark`。
-用户口径 m00785 的决定是「既然已知不行那就先不做，然后更新文档，等待开发者开放更多接口」。
+**这个插件已经实现完毕、三档验收全绿**，但**还没有装进宿主、也没有激活**。
+
+原始原因（m00785，0.8.7 时代）是上面第 2 条约束解不开：当时只有一条 CSS 通道，
+装上去就会顶掉用户当前的 `skin-win11-dark`。用户口径 m00785 的决定是
+「既然已知不行那就先不做，然后更新文档，等待开发者开放更多接口」。
+
+**0.8.8 把那个卡点解除了**（`active_background` 与 `active_skin` 解耦，见 §0.1 路 A），
+但本仓库产物**仍是路 B 形态**（`plugin_type:"skin"` 的独立插件 `bg-custom`），
+所以「装上会顶掉皮肤」这件事在**当前产物形态下依然成立** —— 不装的决定因此继续有效，
+直到把 `bg-custom` 改造成 `plugin_type:"background"`（改造清单见
+`reference/plugin-dev-0.8.8-skill.md` §7 第 8 项）。
 
 所以仓库侧的正确状态是：
 
@@ -54,8 +90,11 @@ python build_background.py set --image assets/sample-wallpaper.jpg --targets ski
 * `%APPDATA%\OpenRevo\plugins\` 里**没有** `bg-custom`，宿主 `config.json` 的 `active_skin` 保持原值；
 * 宿主侧零改动 —— 谁也没有被顶掉。
 
-解除阻塞需要宿主开放的能力，见根 `README.md` §11.4 的三选一表格（第二条 CSS 通道 / `active_skin` 分槽 /
-原生背景图配置键）。在那之前，`--targets <skin_id>` 的派生皮肤就是「皮肤 + 背景」的替代方案。
+选择装的话，**0.8.8 下的操作口径**（脚本尚未实现，需手工或改造后使用）：
+把 `bg-custom` 的 manifest 改成 `"plugin_type":"background"` + `"background_css":"theme.css"`
+（或改名 `background.css`），装进插件目录后点插件页的【刷新】出现在列表里，再打开它的开关 ——
+此操作只写 `active_background`，**不动** `active_skin`。在那之前，`--targets <skin_id>` 的派生皮肤
+就是「皮肤 + 背景」的替代方案。
 
 ## 1. 快速使用
 
@@ -63,8 +102,9 @@ python build_background.py set --image assets/sample-wallpaper.jpg --targets ski
 # ① 指图 + 选参数（默认只出独立插件 bg-custom；相对路径按仓库根解析）
 python build_background.py set --image assets/sample-wallpaper.jpg
 
-# ② 装进宿主插件目录（宿主只在启动时枚举插件目录，装完必须重启）
-#    ⚠️ 按用户口径 m00785 这一步当前刻意不执行（会顶掉 skin-win11-dark，见 §0.2）
+# ② 装进宿主插件目录
+#    ⚠️ 按用户口径 m00785 这一步当前刻意不执行（当前产物是 skin 形态，会顶掉 skin-win11-dark，见 §0.2）
+#    0.8.8 起宿主支持第二条通道，把产物改成 plugin_type:"background" 后即可与皮肤并存（§0.1 路 A）
 python build_background.py install --activate
 
 # ③ 看现状（启用状态 / 源图 / 参数 / 每个产物的 sha1 与装没装）
@@ -102,7 +142,7 @@ python build_background.py off
 
 ```
 bg-custom\                     # 默认产物：只有 3 条背景规则，没有皮肤令牌
-├── manifest.json              # id/name/version/plugin_type:"skin"/theme_css/window
+├── manifest.json              # 当前是 plugin_type:"skin"（0.8.8 可改 "background"+background_css，见 §0.1 路 A）
 ├── theme.css                  # 139 KB（背景段 + 内联 base64 图）
 └── assets\
     ├── background.jpg         # PIL 处理后的成品（2560×1440 q88，入库，便于复核与直接取用）
@@ -115,6 +155,10 @@ skin-win11-dark-bg\            # 仅 --targets 指定时：派生皮肤
 ```
 
 背景段固定 **3 条规则**（`verify-bg.sh` 按规则数钉死）：
+
+> 选择器前缀是「合并进 `theme.css`」（§0.1 路 B）这个形态逼出来的：宿主把这份 CSS 当**皮肤**注入，
+> 所以必须靠 `[data-skin="<id>"]` 把自己限定在启用该皮肤时生效。
+> 若改走 0.8.8 的 `background` 通道（路 A1），前缀反而多余 —— 那条通道只在该背景被激活时才注入。
 
 1. `[data-skin="<id>"] , html[data-skin="<id>"] { --bgimg-photo / --bgimg-scrim / --bgimg-base
    / --bgimg-size / --bgimg-position / --bgimg-repeat }` —— **令牌**。
@@ -138,12 +182,20 @@ skin-win11-dark-bg\            # 仅 --targets 指定时：派生皮肤
 * `src/base.css` 自己（**仅派生皮肤会遇到**）：`.acrylic-container`（(0,2,0)）与
   `[data-skin] .mini-drawer-root{background: var(--wf-bg) !important}`（(0,2,0)）—— 注意 base.css 里有
   **两处** `background: var(--wf-bg) !important`（第 692 / 1095 行）。
-* 宿主给 `.mini-drawer-root` 的**内联** `background:rgba(12,15,22,.96)`。
+* 宿主给 `.mini-drawer-root` 的**内联** `background:rgba(12,15,22,.96)` —— **仅 0.8.7**；
+  0.8.8 把这批内联删掉了（改由 `.mini-drawer-root` 规则里的 `background:var(--surface-base,…)`
+  + `backdrop-filter:blur(28px)` 承担），见 `host-truth-extraction.md` §7。
 
 对策：**类名写两遍**。`.acrylic-container.acrylic-container` = (0,3,0)，同样压过宿主内联（内联只在
 (1,0,0) 这一档压过高特异性规则，而内联本身只声明了 `background` 简写、`!important` 是作者侧唯一解）。
 类名重复计数与「这里没有别的类名可写」这件事本身无关，纯粹是为了抬特异性 —— 因此
 `bg-custom` 与派生皮肤用的是**同一条规则、同一个模板**，不需要两套 CSS。
+
+> 0.8.8 兼容性：`.mini-drawer-root.mini-drawer-root` = (0,2,0) **同时**打赢两版 ——
+> `!important` 压 0.8.7 的内联，(0,2,0) 压 0.8.8 那条 (0,1,0) 的 `.mini-drawer-root` 规则。
+> 也就是说 0.8.8 下 `!important` 已经**不是必需**，但留着不产生副作用，无需为版本分叉两套模板。
+> 同理 `.acrylic-container` 在 0.8.8 里与 `.openrevo-shell` 是**同一个元素**（两个类都在根上），
+> 所以既有的选择器不做任何改动就继续命中原有的那块画布。
 
 ### 3.2 遮罩写在同一个 `background-image` 里
 

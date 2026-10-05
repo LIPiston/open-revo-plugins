@@ -10,7 +10,7 @@
 | 4 | `file://` 下读 `cssRules` 抛 `SecurityError` | 跨文档样式访问被禁 | 加 `--allow-file-access-from-files` |
 | 5 | 数「灰色像素」就断定不透明 —— 结论不可靠 | 灰色可能纯属巧合 | 用**背景交换差分**（棋盘格 vs 纯色底两图逐像素相同）或**宿主色计数为 0** |
 | 6 | 预览里迷你面板撑满浏览器，而不是 410×610 | 舞台用了内联 `width:100vw;height:100vh` | 预览专用 `.pv-stage .mini-drawer-root{width/height:100%!important}` |
-| 7 | 装完皮肤，宿主里「皮肤没生效」 | **宿主只在启动时枚举插件目录**，运行中的进程比插件文件老 | 比进程 `StartTime` 与插件目录 mtime（`_tools\when.ps1`），提权重启 |
+| 7 | 装完皮肤，宿主里「皮肤没生效」 | **宿主在启动时枚举插件目录**，运行中的进程比插件文件老 | 比进程 `StartTime` 与插件目录 mtime（`_tools\when.ps1`），提权重启。（**0.8.8 更新**：皮肤/背景 CSS 已改为按需注入 —— 换开关即重注入，**改已有 CSS 只需关/开一次开关**；但新**装目录**仍要先点【刷新】重扫列表，而【刷新】本身只重扫、不重注入。见 `plugin-dev-0.8.8-skill.md` §4） |
 | 8 | 真机截图里出现不属于皮肤的纯色块 | 别的窗口盖在上面（本次是 QQ：`pid=13556 class='Chrome_WidgetWin_1' rect=(569,237)-(2230,1273)`） | 抓图前用 `_tools\who.ps1` 确认 z 序/遮挡；别用 `WindowFromPoint` 当 z 序证据（它跳过 Tauri 分层窗口） |
 | 9 | `PrintWindow` 抓 Tauri 窗口得到全 alpha=0 黑图 | Tauri 窗口是透明/分层表面 | 放弃 `PrintWindow`，用**提权 TOPMOST + `CopyFromScreen`** |
 | 10 | `SetWindowPos(HWND_TOPMOST)` 返回 False / 没效果 | 宿主 `requireAdministrator`，UIPI 拦截非提权调用 | 抓图脚本提权运行 |
@@ -25,7 +25,7 @@
 | 19 | CDP 调试端口连不上 | wry/Tauri 忽略 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` | 放弃该路线；顺手删掉 HKCU 里那个环境变量，免误导 |
 | 20 | 按偏移解 brotli「成功」但内容是垃圾 | **brotli 没有魔数**，错位也能解出东西 | 解压后校验产物（开头合法、规则条数、关键类名可 grep），每次宿主升级重新定位偏移 |
 | 21 | 皮肤里 `@import` 无效 | 注入点在宿主文档，base URL 是 `tauri://` | `theme.css` 必须单文件 |
-| 22 | 版式错位、滚动条莫名出现 | 宿主没有全局 `*{box-sizing:border-box}` | 自己声明 `box-sizing`；**永远不要**给 `.mini-drawer-root` 加 `border` |
+| 22 | 版式错位、滚动条莫名出现 | ⚠️ **旧归因已作废**：宿主**有**全局 `*{box-sizing:border-box;margin:0;padding:0;user-select:none}`（0.8.7/0.8.8 逐字节相同，紧跟 `:root`），不需要自己声明 | 别重复声明 `box-sizing`；`.mini-drawer-root` 不加 `border` 的理由是**纵向余量只剩 11px**（见 #26），描边用 `box-shadow: inset 0 0 0 1px …` 画（`--wf-window-stroke`） |
 | 23 | 皮肤普通选择器压不过宿主 | 宿主用 React 内联 `style={{…}}` 写死属性 | author `!important`（胜过普通声明，也包括内联） |
 | 24 | 迷你面板强调色变成宿主 mono 的白色 | 宿主在 `.mini-drawer-root[data-theme=mono\|cyber]`（0,2,0）**局部重声明** `--theme-*`；元素上的局部声明胜过继承 | 皮肤在 `[data-skin="X"] .mini-drawer-root[data-theme]`（0,3,0）重声明面板令牌，值读 `--wf-hue-*` 镜像 |
 | 25 | 预览里按钮渲染成 `buttonface rgb(240,240,240)` / `buttontext rgb(0,0,0)`，且与内联样式无关 | 同第 1 条：`<link>` 启用遗留了未重算的元素（已排除宿主干扰、缺令牌、内联覆盖、选择器被丢、解析错误、禁用表） | 改成 `<style>` 注入后消失；排查时先记住宿主**没有** `button` 规则、也没有 `#f0f0f0` 字面量 |

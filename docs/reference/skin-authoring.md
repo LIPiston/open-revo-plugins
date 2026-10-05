@@ -24,7 +24,8 @@
 * 宿主在切换皮肤时会调 `resize_window` 并**重新居中**窗口，尺寸取 manifest 的 `window`。
 * **`window` 的宽高是 CSS 逻辑像素**（Tauri `LogicalSize`），不是物理像素。真机实测：manifest 写 `1120×800`、
   显示器 150% 缩放 → 窗口物理 `1702×1213`，客户端 CSS ≈ `1135×809`。
-* **宿主只在启动时枚举插件目录** → 装完必须重启宿主（见 `real-machine-verification.md` 第 2 节）。
+* **宿主只在启动时枚举插件目录** → 0.8.7 装完必须重启宿主；**0.8.8 起插件页【刷新】可重扫列表**（但改已有
+  `theme.css` 内容仍需关/开一次开关，见 `real-machine-verification.md` 第 2 节）。
 
 ### manifest 的双键对冲
 
@@ -191,7 +192,7 @@ for _hue_slot in ("gpu", "hz", "lux", "kbd", "bat"):
    [data-skin="X"] .mini-drawer-root{
      background: var(--wf-bg) !important;        /* 干掉内联 rgba(12,15,22,.96) */
      backdrop-filter: none !important;           /* 干掉内联 blur(28px) */
-     border: 0 !important;                       /* 宿主无全局 box-sizing，别加 border */
+     border: 0 !important;                       /* 别加 border：迷你面板纵向余量只剩 11px（pitfalls #26），描边走 box-shadow: inset */
      border-radius: 0 !important;
      box-shadow: inset 0 0 0 1px var(--wf-window-stroke) !important;
      scrollbar-width: thin; scrollbar-color: var(--wf-scroll) transparent;
