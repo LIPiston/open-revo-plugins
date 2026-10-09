@@ -20,7 +20,8 @@
 | 宿主 exe | `D:\Program Files\OpenRevo\open-revo.exe`，**唯一真值来源** |
 | **宿主会自我更新并重启** | 开发中途真实发生过（8,490,496 → 8,496,640 B；exe mtime 23:49:31、进程 23:54:17 自动重启）⇒ 一切**字节偏移 / 文件大小**断言当场作废。动手前先比 exe 的 mtime/大小与进程 StartTime；判断宿主 CSS 是否变化要用**资产文件名里的内容哈希**（`index-<hash>.css`），本次哈希未变、抽出内容与旧构建逐字节相同 |
 | 宿主进程权限 | `requireAdministrator` → `taskkill /F` 被拒（拒绝访问）。重启必须走提权 `_tools\kill-and-start.ps1`。观测样例：pid 3976 / StartTime `2026/10/4 9:48:00` |
-| **插件枚举时机** | **0.8.7：只在宿主启动时枚举一次插件目录**，装完不重启 = 新皮肤/新 ID 完全不生效。**0.8.8：插件页【刷新】可重扫列表**（`get_custom_plugins`），新目录不用重启；但【刷新】**不重注入**已激活插件的 CSS，改已有 `theme.css` 仍需关/开一次开关。`active_skin` 指向已删 ID 时仍须「停 → 改 → 启」（`_tools\when.ps1` 比对进程启动时间 vs 插件目录 mtime） |
+| **插件枚举时机** | **0.8.7：只在宿主启动时枚举一次插件目录**，装完不重启 = 新皮肤/新 ID 完全不生效。**0.8.8：插件页【刷新】可重扫列表**（`get_custom_plugins`），新目录不用重启；**`v0.8.8-dbfe615` 起【刷新】还会热重载当前样式**（重放 `onApplySkin`/`onApplyBackground` → 重新 `load_plugin_*_css`），所以改 `theme.css`、装新目录都只需**点一次【刷新】**。⚠️ 早于该构建（含 0.8.7、`v0.8.8-bf72755`）【刷新】只重扫列表，改已有 `theme.css` 需关/开一次开关。`active_skin` 指向已删 ID 时仍须「停 → 改 → 启」（`_tools\when.ps1` 比对进程启动时间 vs 插件目录 mtime），并注意**判断宿主是否更新要看构建号**（标题栏徽标 `PRO v0.8.8-xxxxxxx`），文件版本资源恒报 `0.8.8` |
+| **宿主构建号才是版本指纹** | `VersionInfo` 的 `FileVersion` / `ProductVersion` 在同一个 `0.8.8` 内部多次构建间**恒定不变**（实测 `bf72755` 8,565,760 B 与 `dbfe615` 8,826,368 B 都报 `0.8.8`）。可靠指纹 = 前端 JS 里的徽标串 `v0.8.8-<hash>`、exe 体积 + mtime，以及**资产文件名**（`index-<hash>.js` 变了就是前端变了） |
 | `active_background` | 0.8.8 新增：与 `active_skin` **独立的第二个 CSS 槽位**（`plugin_type:"background"` → `load_plugin_background_css` → `<style id="openrevo-custom-background">`）。当前实测值 = 未设置（宿主 `config.json` 里没有该键） |
 | `wake_window_mode` | **只在启动时读入**。用户原值是 `mini`（临时改过就必须还原） |
 | **宿主会周期性整份回写 config** | 实测 2026-10-04 的 10:13:06 / 11:26:44 / 12:06:33，期间无人碰它 ⇒ 外部改写会被冲掉，改 `active_skin` 的顺序必须是**停 → 改 → 启**（`_tools\set-active-skin.ps1`，见 `pitfalls.md` #37） |

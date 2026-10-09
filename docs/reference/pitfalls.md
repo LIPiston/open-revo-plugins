@@ -10,7 +10,7 @@
 | 4 | `file://` 下读 `cssRules` 抛 `SecurityError` | 跨文档样式访问被禁 | 加 `--allow-file-access-from-files` |
 | 5 | 数「灰色像素」就断定不透明 —— 结论不可靠 | 灰色可能纯属巧合 | 用**背景交换差分**（棋盘格 vs 纯色底两图逐像素相同）或**宿主色计数为 0** |
 | 6 | 预览里迷你面板撑满浏览器，而不是 410×610 | 舞台用了内联 `width:100vw;height:100vh` | 预览专用 `.pv-stage .mini-drawer-root{width/height:100%!important}` |
-| 7 | 装完皮肤，宿主里「皮肤没生效」 | **宿主在启动时枚举插件目录**，运行中的进程比插件文件老 | 比进程 `StartTime` 与插件目录 mtime（`_tools\when.ps1`），提权重启。（**0.8.8 更新**：皮肤/背景 CSS 已改为按需注入 —— 换开关即重注入，**改已有 CSS 只需关/开一次开关**；但新**装目录**仍要先点【刷新】重扫列表，而【刷新】本身只重扫、不重注入。见 `plugin-dev-0.8.8-skill.md` §4） |
+| 7 | 装完皮肤，宿主里「皮肤没生效」 | **宿主在启动时枚举插件目录**，运行中的进程比插件文件老 | 比进程 `StartTime` 与插件目录 mtime（`_tools\when.ps1`），提权重启。（**0.8.8 更新**：皮肤/背景 CSS 已改为按需注入；**`v0.8.8-dbfe615` 起【刷新】本身就热重载当前样式**（重放 `onApplySkin`/`onApplyBackground`），所以**点一次【刷新】即可**，不必拨开关、不必重启。⚠️ 早于该构建的【刷新】只重扫列表，那时需「刷新 + 拨开关」。另：宿主更新后 `VersionInfo` 仍报旧版本号，**判更新要看构建号**。见 `plugin-dev-0.8.8-skill.md` §4/§9） |
 | 8 | 真机截图里出现不属于皮肤的纯色块 | 别的窗口盖在上面（本次是 QQ：`pid=13556 class='Chrome_WidgetWin_1' rect=(569,237)-(2230,1273)`） | 抓图前用 `_tools\who.ps1` 确认 z 序/遮挡；别用 `WindowFromPoint` 当 z 序证据（它跳过 Tauri 分层窗口） |
 | 9 | `PrintWindow` 抓 Tauri 窗口得到全 alpha=0 黑图 | Tauri 窗口是透明/分层表面 | 放弃 `PrintWindow`，用**提权 TOPMOST + `CopyFromScreen`** |
 | 10 | `SetWindowPos(HWND_TOPMOST)` 返回 False / 没效果 | 宿主 `requireAdministrator`，UIPI 拦截非提权调用 | 抓图脚本提权运行 |

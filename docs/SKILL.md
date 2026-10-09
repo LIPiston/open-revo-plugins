@@ -24,7 +24,8 @@ cd <项目根目录>
 python build_skins.py --install      # 生成 + 安装四套皮肤到 %APPDATA%\OpenRevo\plugins\
 bash _tools/verify.sh                # 验收总闸：重跑两页审计 + 逐条断言（132 条），全绿才算过
 bash _tools/audit.sh                 # 无头 Chrome 跑四套变体的 computedStyle 审计 → _audit\<id>.audit.txt
-# 让宿主认到新插件目录：0.8.7 必须重启（只在启动时枚举）；0.8.8 起可改为【刷新】+ 拨开关。重启走提权脚本：
+# 让宿主认到新插件目录：0.8.7 必须重启（只在启动时枚举）；0.8.8 起点一次【刷新】即可
+# （v0.8.8-dbfe615 起【刷新】连样式一起热重载）。判构建看徽标 PRO v0.8.8-<hash>。重启走提权脚本：
 powershell -NoProfile -Command "Start-Process powershell -Verb RunAs -WindowStyle Hidden -Wait -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','<项目根目录>\_tools\kill-and-start.ps1'"
 ```
 
@@ -49,9 +50,12 @@ powershell -NoProfile -Command "Start-Process powershell -Verb RunAs -WindowStyl
 `.overview-main-grid` / `.sensor-gauge-cluster` / `.cooling-fan-card` / `.power-mode-selector` 在发行版里**不存在**；
 手册的 `--core-*` 令牌也不存在，但 `--surface-*` / `--status-*` / `--radius-*` **就是宿主真值**
 （`--wf-*` 是本工具链私有前缀，不是宿主令牌，见 `reference/plugin-dev-0.8.8-skill.md` §5.2）；
-手册说「插件页点刷新即热加载」——**0.8.8 起 CSS 是按需注入**（拨开关即重注入），【刷新】只重扫插件列表；
-装新插件目录仍需「刷新 + 拨开关」。**0.8.8 新增背景壁纸通道 `active_background`**
+手册说「插件页点刷新即热加载」——**`v0.8.8-dbfe615` 起完全成立**：【刷新】= 重扫列表 **+ 热重载当前样式**
+（重放 `onApplySkin`/`onApplyBackground` → 重新 `load_plugin_*_css`），点一次刷新即可，不必拨开关、不必重启；
+0.8.8 的 CSS 本身也是按需注入（`useCallback` 内）。⚠️ 早于该构建（含 0.8.7、`v0.8.8-bf72755`）的【刷新】只重扫列表。
+**0.8.8 新增背景壁纸通道 `active_background`**
 （`<style id="openrevo-custom-background">`），与皮肤槽位正交可共存 —— 见 `reference/plugin-dev-0.8.8-skill.md`。
+注意判断宿主是否更新**要看构建号**（徽标 `PRO v0.8.8-xxxxxxx`），`VersionInfo` 在同版本内多次构建间不变。
 
 ## 动手前必读的硬约束
 
@@ -73,8 +77,9 @@ powershell -NoProfile -Command "Start-Process powershell -Verb RunAs -WindowStyl
 6. **宿主有全局重置** `*{box-sizing:border-box;margin:0;padding:0;user-select:none}`（0.8.7/0.8.8 都在，紧跟 `:root`）
    → 不用自己再声明；**永远不要**给 `.mini-drawer-root` 加 `border`（理由不是 box-sizing，而是它纵向余量只剩 11px，描边请用 `box-shadow: inset`）。
 7. **宿主认新插件目录的时机**：0.8.7 只在启动时枚举一次（装完不重启，旧进程里根本没有新皮肤，先比
-   `_tools\when.ps1` 的进程启动时间与插件目录 mtime）；**0.8.8 起插件页【刷新】可重扫列表**（但仍不重注入
-   已激活插件的 CSS，改 `theme.css` 要关/开一次开关）。宿主进程是 `requireAdministrator`，`taskkill` 会被拒
+   `_tools\when.ps1` 的进程启动时间与插件目录 mtime）；**0.8.8 起插件页【刷新】可重扫列表**，
+   **`v0.8.8-dbfe615` 起【刷新】还会热重载当前样式**（点一次即可，不必拨开关）。宿主进程是
+   `requireAdministrator`，`taskkill` 会被拒
    → 用提权 `_tools\kill-and-start.ps1`。
    若 `active_skin` 指向的是**已被删掉的旧 ID**（换 ID / 改名的常见残局），光重启不够——宿主只在启动时读一次，
    而且**运行中会周期性整份回写 config**，所以顺序必须「停 → 改 → 启」，用 `_tools\set-active-skin.ps1`（见 pitfalls #37）。

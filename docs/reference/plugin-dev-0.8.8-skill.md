@@ -1,8 +1,13 @@
 # 开发者新版 Skill（0.8.8）· 逐条实测对照
 
 > **原文存档**：`D:\LIPis\desktop\openrevo-plugin-dev\SKILL.md`（415 行 / 16,190 B，官方 `openrevo-plugin-dev` skill）。
-> 本页是**消化 + 逐条取证**：把它的每条断言拿去和真实宿主（`open-revo.exe` **0.8.8** / 8,565,760 B）比对，
+> 本页是**消化 + 逐条取证**：把它的每条断言拿去和真实宿主（`open-revo.exe` **0.8.8**）比对，
 > 标注「✅ 属实 / ⚠️ 部分属实 / ❌ 不成立」，并写下取证位置。
+>
+> **⚠️ 0.8.8 内部又出过两个构建，版本资源都是 `0.8.8`**：先 `v0.8.8-bf72755`（8,565,760 B，本页第一版取证对象），
+> 后 `v0.8.8-dbfe615`（**8,826,368 B**，mtime 2026-10-06 21:17）。**判断宿主是否更新要看构建号**（点标题栏
+> `PRO v0.8.8-xxxxxxx` 徽标即复制），**不能看「文件版本」**。新构建**反转了本页 §4 的判定**（【刷新】现在会热重载样式），
+> 其余断言逐条复核后**全部仍然成立**。
 >
 > 它与 `docs\OpenRevo_第三方插件开发手册.md`（v1.0 官方手册）是**两份不同的原文**：
 > 手册有 7 个用例、偏叙事；新 Skill 是 **Agent 规范件**、偏可执行断言，且**首次公开了 0.8.8 的背景壁纸通道**。
@@ -16,7 +21,8 @@
 | 2 | **皮肤 CSS 注入点改名**：`openrevo-custom-skin` → **`openrevo-theme-skin`**（启动时兼容读旧 id） | 只影响文档措辞，皮肤产物无需改 |
 | 3 | **`data-skin` / `data-background` 同时挂到 `document.documentElement`** | 我们的 `html[data-skin]` / `body[data-skin]` 手臂**正好命中**，兼容 |
 | 4 | **Background Engine 零代码壁纸**：只给图片文件，宿主自己生成铺满样式 | 背景插件多了一条「零 CSS」路径 |
-| 5 | **皮肤/背景 CSS 按需注入**（不再是「只在启动时枚举」） | 「必须重启宿主」的旧结论**部分作废**（详见 §4） |
+| 5 | **皮肤/背景 CSS 按需注入**（不再是「只在启动时枚举」） | 「必须重启宿主」的旧结论**部分作废**；**0.8.8-dbfe615 起【刷新】本身就会重载样式**（详见 §4） |
+| 6 | **`v0.8.8-dbfe615` 构建**（8,826,368 B）：新增 `data-form-factor` 属性 + `--debug` 专属机型形态模拟 | **对插件无新增钩子面**（`data-form-factor` 不挂 `documentElement`，且 CSS 里 0 引用）；插件接口面逐项复核**零变动**，详见 §9 |
 
 ⇒ 结论：**m00785 的卡点（背景与皮肤互斥）在 0.8.8 已被宿主自己解除。** 但本插件当前产物仍是
 `plugin_type:"skin"`（占皮肤槽位），尚未改造成 `background` 形态 —— 见 §6。
@@ -90,25 +96,40 @@ Data URI 注入**；**严禁**写脚本把图片编码成 base64，直接写正�
 
 **Skill 原文**：「免重启热刷新：点【刷新】按钮，宿主调用 `invoke('get_custom_plugins')` **立即重新扫描并挂载新插件**」。
 
-**判定：❌ 不成立（刷新只重扫列表，不重新注入 CSS）**
+**判定：✅ 成立（0.8.8-dbfe615 起，Skill 这一条是对的）—— 本页第一版曾判 ❌，已按新构建反转。**
 
-JS 逐字：刷新按钮的 handler 是
+新构建（`v0.8.8-dbfe615`）的刷新按钮 handler 逐字：
 
 ```js
-k = async () => { _(!0); try { const j = await m("get_custom_plugins"); d(j || []) } catch … }
+j = async (S = !1) => {
+  b(!0);
+  try {
+    const D = await m("get_custom_plugins") || [];
+    u(D),
+    S && (i && a && (D.some(W => W.id === i) ? a(i) : a(null)),
+          o && d && (D.some(W => W.id === o) ? d(o) : d(null))),
+    p && p()
+  } catch (P) { console.error("Failed to load custom plugins:", P) } finally { b(!1) }
+}
 ```
 
-绑在 `{onClick:k, className:"toggle-btn", title:"刷新已安装的插件列表"}` —— 它**只把插件列表重新读一遍
-并 setState**，没有任何 `load_plugin_theme_css` / `load_plugin_background_css` 调用。
+绑在 `{onClick:()=>j(!0), className:"toggle-btn", title:"刷新已安装插件列表并热重载当前样式"}` —— 传入的 `!0`
+即形参 `S`，于是**重扫列表之后**，会拿当前 `activeSkin`(`i`)／`activeBackground`(`o`) 去重跑
+`onApplySkin`(`a`)／`onApplyBackground`(`d`)，也就是重新 `load_plugin_theme_css` /
+`load_plugin_background_css` 并刷新 `<style>.textContent`；插件若已从新列表消失则把 active 置 `null`
+（连带移除 `<style>`）。
 
-**真正的按需注入点**是使用侧的 `useCallback`：皮肤/背景 CSS 在**开关切换时**（插件页拨 `onChange:()=>I(j)`）
-重新 `load_plugin_*_css` 并刷新 `<style>.textContent`。
+旧构建（`v0.8.8-bf72755`）逐字对照，**没有 `S` 形参、没有回调重放**：
 
-**对本仓库旧结论的修正**：`plugin-manual-digest.md` §10 第 4 条与 §8 调试段、`pitfalls.md` #7 原先写
-「**宿主只在启动时枚举插件目录**、皮肤必须重启宿主」——这在 0.8.7 的工作流下**结论仍可用**（新装目录仍需
-刷新列表 + 拨开关），但**「CSS 只能靠重启生效」这半句已作废**：0.8.8 是在 `useCallback` 里按需注入的。
-实操口径：**装完新插件目录 → 点【刷新】重扫列表 → 拨一次开关**；改的只是已有插件的 CSS 内容时，关/开
-一次开关即可，**不必重启**。
+```js
+k = async () => { _(!0); try { const j = await m("get_custom_plugins"); d(j || []) } catch … },
+```
+
+title 也只是 `"刷新已安装的插件列表"`。⇒ **这不是「之前查错了」，而是开发者在新构建里补上了热重载**。
+
+**对本仓库的实操口径（取代旧版）**：改 `theme.css` / background CSS **只需点一次【刷新】**，
+不必拨开关、也不必重启；装**新插件目录**同样「刷新」一步到位（旧版需要「刷新 + 拨开关」两步）。
+原先那条「装完必须重启宿主」的结论只在 **0.8.7** 与 `bf72755` 之前成立。
 
 ## 5. 插槽矩阵与令牌表（Skill §4 / §5）
 
@@ -195,15 +216,97 @@ P.setAttribute("data-window-mode", e ? "full" : "mini")
 |---|---|---|
 | 1 | 新增本页，并把 Skill 存档路径写进 `docs\README.md` | 本次完成 |
 | 2 | 反转 `--wf-*` 的归属表述（手册头注 / digest §9+§10 / `docs\README.md:46` / `SKILL.md`） | 本次完成 —— 逐处核过 `pitfalls.md:30`（#30）与 `:36` 后判定**无需改动**：那里说的是**本工具链自己的** `--wf-accent*` 令牌面，不是宿主令牌，语义本来就对 |
-| 3 | 「必须重启宿主」→ 改为「刷新列表 + 拨开关」口径 | 本次完成 |
+| 3 | 「必须重启宿主」→ 改为「点一次【刷新】即可（`v0.8.8-dbfe615` 起含热重载）；早于该构建为『刷新列表 + 拨开关』）」 | 本次完成（§4 又按新构建二次修订） |
 | 4 | 注入 id `openrevo-custom-skin` → `openrevo-theme-skin`（并注明启动兼容旧 id） | 本次完成 |
 | 5 | `data-skin`「从不写在 `<html>` 上」→ 0.8.8 两处都挂 | 本次完成 |
 | 6 | `host-truth-extraction.md` 的偏移/文件名更新到 0.8.8 | 本次完成 |
 | 7 | `README.md` §11.4：三选一表格 → 标注①已满足（第二条通道已存在） | 本次完成 |
 | 8 | **把 `bg-custom` 从 `plugin_type:"skin"` 改造成 `plugin_type:"background"`**（真正解开 m00785 卡点） | ⬜ **尚未做**（代码改动，需独立一轮） |
+| 9 | 按 `v0.8.8-dbfe615` 复核（用户问「更新后有没有新接口可用」）并反转 §4 | 本次完成 —— 见 §9 |
 
 第 8 项是本页唯一未落地的动作：宿主通道已经开了，但本插件的 manifest 还是 `skin` 形态、仍占皮肤槽位。
 改造后才能做到「`skin-win11-dark` 照用 + 背景照铺」而无需派生皮肤。
+
+## 9. 复核 `v0.8.8-dbfe615`（新构建）：有没有新接口可用？
+
+**结论：插件接口面零新增，但【刷新】行为有实质改进。**
+
+宿主从 `v0.8.8-bf72755`（8,565,760 B）更新到 `v0.8.8-dbfe615`（**8,826,368 B**，+260,608 B，
+mtime 2026-10-06 21:17）。`VersionInfo` 的 `FileVersion` / `ProductVersion` **仍报 `0.8.8`** ——
+改版识别只能靠**构建号**或体积。
+
+### 9.1 插件接口面：逐项零变动（旧构建 / 新构建计数完全相等）
+
+`plugin_type` 13/13、`background_css` 2/2、`theme_css` 2/2、`active_background` 2/2、`active_skin` 2/2、
+`load_plugin_background_css` 2/2、`load_plugin_theme_css` 2/2、`set_active_background` 1/1、
+`set_active_skin` 1/1、`openrevo-custom-background` 4/4、`openrevo-theme-skin` 6/6、
+`get_custom_plugins` 2/2、`set_custom_plugin_enabled` 1/1、`get_active_background` 1/1、
+`get_active_skin` 1/1、`load_plugin_html` 1/1、`open_custom_widget` 1/1、`close_custom_widget` 2/2、
+`resize_window` 5/5、`data-background` 3/3、`data-skin` 3/3、`manifest` 1/1、`"entry"` 0/0。
+
+`plugin_type==="…"` 字面量两版都只有 `['background','skin','tab','widget']`；
+**`data-slot` 值集合两版完全相同**（20 个）；插件 tab 的 `postMessage` 契约两版都只有
+`SET_POWER_MODE` / `SET_FAN_BOOST` / `SET_BATTERY_LIMIT` 三条。
+
+仍**不存在**（两版都 0）：`permissions`、`install_plugin`、`uninstall_plugin`、`remove_plugin`、
+`reload_plugin`、`get_active_theme`、manifest `"type"`。
+
+### 9.2 新增命令与事件：与插件无关
+
+- 前端新增 3 个 IPC 调用：`get_keyboard_sleep_timeout` / `set_keyboard_sleep_timeout` /
+  `get_model_capabilities`（键盘背光延时与机型能力，系统页用）。命令集合 128 → 131。
+- 前端新增 20 个**宿主自己订阅**的事件名（`reset-to-mini` / `sync-window-mode` 之外）：
+  `bluetooth-state-changed`、`camera-state-changed`、`color-calibration-changed`、`dc-status-changed`、
+  `display-brightness-changed`、`fn-lock-state-changed`、`gpu-mode-changed`、`hardware-state-updated`、
+  `kb-engine-changed`、`keep-awake-state-changed`、`keyboard-brightness-changed`、
+  `keyboard-sleep-timeout-changed`、`mic-state-changed`、`physical-fan-boost-switched`、
+  `physical-mode-switched`、`refresh-rate-changed`、`touchpad-state-changed`、
+  `unlock-battery-power-limit-changed`、`wifi-state-changed`、`win-lock-state-changed`。
+  ⚠️ 这是**宿主页面的订阅**；**第三方插件能否 `listen` 这些事件未实测**，不得写进文档当结论。
+
+### 9.3 新增 `data-form-factor` 与 Dev Mode 形态模拟（对插件无用）
+
+两个根元素都加了 `data-form-factor`（值 `"gaming"` / `"thin_light"`）：
+
+```jsx
+// App 根
+<div className="openrevo-app-root" data-theme={I} data-skin={b||void 0}
+     data-background={k||void 0} data-window-mode={e?"full":"mini"}
+     data-form-factor={(f?.form_factor)||"gaming"}>
+// 主窗
+<div className="acrylic-container openrevo-shell" data-slot="shell"
+     data-theme={t} data-form-factor={(ie?.form_factor)||"gaming"}>
+```
+
+**它不挂 `documentElement`** —— 逐字 `const M=document.documentElement; b?M.setAttribute("data-skin",b):…,
+k?M.setAttribute("data-background",k):…, M.setAttribute("data-theme",I),
+M.setAttribute("data-window-mode",e?"full":"mini")` 里没有 `form-factor`。
+且 `data-form-factor` 在 CSS 里 **0 引用**，新增的 6 个 `.sys-card*` 类在 CSS 里也 **0 引用**
+（只在 JSX 里用）。⇒ 皮肤/背景插件**无法也无需**针对它写样式。
+
+配套的 `--debug` 专属卡片（标题「机型形态与能力实时预览 (Dev Mode)」）在三个预设间切换
+`real` / `thin_light` / `gaming`，纯前端伪造 `capabilities` 对象（`preview_xingyao_14` /
+`preview_gaming`）。这是**宿主开发者自测模具裁切**用的，不是插件 API。
+
+### 9.4 唯一实质行为变化 = §4 的【刷新】热重载
+
+新旧构建在插件相关逻辑上的**唯一**语义差异就是 §4 那条：新【刷新】会重放
+`onApplySkin` / `onApplyBackground`。CSS 文件本身**逐字节未变**
+（`index-D5aBypuh.css` 两版 sha256 都是 `ce754dfbaa19666b…`，55,011 B / 375 条规则）。
+
+### 9.5 顺带复核：确认无变动的既有结论
+
+Background Engine（12 个候选文件名、模板、错误串）、双通道注入、`active_background` 独立单值、
+`permissions` 不存在、`:root` 令牌表、`--wf-*` 为工具链私有前缀（新 JS 仍 0 命中）、
+`data-skin` 挂 `documentElement` —— **本轮全部复核仍成立**。
+
+`config.json` 实键仍无背景图路径键（含 back/imag/wall/bg 的只有 `auto_fallback_kb_on_battery`
+与 `active_background`，后者本机为 `None`）。
+
+> **教训**：exe 里孤立的 `background_image` 字符串（@7124560，夹在 `once_cell` 与
+> `serde_json::private::RawValue` 之间）**不是 config 键**，带引号形式 0 命中、`config.json` 里也没有 ——
+> 不得据单个明文串推断接口存在。同理「grep exe 没命中」≠「宿主没有」：`get_model_capabilities`
+> 与 `get_keyboard_sleep_timeout` 在 JS 里明明在用，exe 明文却是 0（命令名表被拆成碎片串）。
 
 ## 8. 相关文件
 

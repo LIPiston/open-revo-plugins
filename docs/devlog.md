@@ -58,8 +58,10 @@
   | `skin-win10-dark` | `#1683d8` | 2px | 1080×780 | 50,323 B |
 
 * `<id>\theme.css` 与 `%APPDATA%\OpenRevo\plugins\<id>\theme.css` **逐字节一致** → 安装即为最新。
-* 安装后**必须重启宿主**才可见（0.8.7 时宿主只在启动时枚举插件目录；**0.8.8 起插件页【刷新】可重扫列表**，
-  见 §14）——这一条先后坑了两次。
+* 安装后是否要重启宿主，取决于宿主构建（**判断构建看标题栏徽标 `PRO v0.8.8-xxxxxxx`，`VersionInfo` 不可靠**）：
+  0.8.7 只在启动时枚举插件目录 ⇒ 必须重启；0.8.8 起插件页【刷新】可重扫列表；
+  **`v0.8.8-dbfe615` 起【刷新】还会热重载当前样式**（重放 `onApplySkin` / `onApplyBackground`）⇒
+  **点一次【刷新】即可，不必拨开关、不必重启**。见 §14 ——这一条先后坑了两次。
 
 ## 4. 主控台：WinUI3 侧栏 + 取消半透明（m00236）
 
@@ -464,7 +466,7 @@ clone 节点、重新挂载节点、反复触碰 class……用来定位「`.m-b
 | 3 | `data-skin` 与 `data-background` 同挂 `documentElement` | ✅ 属实（0.8.8 新行为） | `C?P.setAttribute("data-skin",C):P.removeAttribute("data-skin")` |
 | 4 | 零 Base64：作者写相对 `url()`，Rust 自动转 Data URI | ⚠️ **半对** | 机制在，但**只对固定文件名的图片探测生效**；exe 里**没有**任何「读作者 CSS 找 `url()` 再改写」的代码痕迹 |
 | 5 | 背景可用**只放 manifest + 一张图**的零代码方式 | ✅ 机制属实 / ❌ 语法写错 | 图片按 **12 个固定文件名**探测（`background|wallpaper|bg` × `.jpg/.jpeg/.png/.webp`），**不是** skill 写的 `"image":"wallpaper.jpg"` 键（该键 exe 0 命中） |
-| 6 | 插件页点【刷新】即热刷新 CSS | ❌ **不成立** | 刷新按钮只调 `get_custom_plugins` **重扫列表**；已激活插件的 CSS 不重注入，改 CSS 要关/开一次开关 |
+| 6 | 插件页点【刷新】即热刷新 CSS | **✅ 成立**（`v0.8.8-dbfe615` 起） | 新 handler 逐字 `j=async(S=!1)=>{…u(D),S&&(…a(i)…d(o)…),p&&p()}`，绑 `onClick:()=>j(!0)`、title `"刷新已安装插件列表并热重载当前样式"` ⇒ 重扫列表 **+ 重放 `onApplySkin`/`onApplyBackground`**，点一次刷新即可。⚠️ 旧构建 `v0.8.8-bf72755` 的 `k=async()=>{…d(j||[])}` 只重扫列表（§14.2 记录反转） |
 | 7 | `plugin_type` 有七种形态（含 `service`/`shell`/`driver`） | ⚠️ 未证实 | 前端字面量只有 `background|skin|tab|widget` 四种 |
 | 8 | manifest 里 `permissions` 字段 | ❌ 不成立 | exe 0 命中，字段表里没有 |
 | 9 | `plugin_type` 与 `type` 完全等价 | ⚠️ 未证实 | exe 里 `"type"` 字面量 0 命中 ⇒ 本项目继续**双发对冲** |
@@ -506,3 +508,73 @@ clone 节点、重新挂载节点、反复触碰 class……用来定位「`.m-b
   这才是「背景与皮肤同时生效」真正落地的那一步。改造后 `manifest.json` 要带
   `"plugin_type":"background"` + `"background_css"`，CSS 选择器前缀可去掉 `[data-skin]`，
   背景段模板与 `verify-bg.sh` 的断言口径需同步调整。
+
+## 15. 宿主又一次更新：复核「有没有新接口可用」（2026-10-06 第六轮，用户口径 m00506/m00508/m00509）
+
+用户说「开发者更新了 openrevo，你检查一下是不是有对应的接口能用了」。结论先行：
+**插件接口面零新增；唯一实质变化是【刷新】按钮开始热重载样式，这条把上一轮的判定反了过来。**
+
+### 15.1 版本指纹：`VersionInfo` 靠不住，要看构建号
+
+* exe 从 8,565,760 B → **8,826,368 B**（mtime 2026-10-06 21:17:00），
+  但 `VersionInfo` 的 `FileVersion` / `ProductVersion` **仍报 `0.8.8`**。
+* 真正的指纹是**构建号**：`v0.8.8-bf72755` → **`v0.8.8-dbfe615`**
+  （前端逐字：`navigator.clipboard.writeText("v0.8.8-dbfe615")`、`title:"点击复制版本号: v0.8.8-dbfe615"`、
+  徽标 `PRO v0.8.8-dbfe615`）。**同一个版本号内部可以出多个构建，且行为会变。**
+* 资产名也换了：JS `index-Tu8RPoda.js`（598,008 B）→ **`index-D-GAymO3.js`**（607,244 B，
+  路径 @ 7,246,680、负载 @ 7,246,705、压缩流 136,046 B、`{` = 7,461）；CSS 保持
+  `index-D5aBypuh.css` 不变，**解出来与上一版逐字节相同**（55,011 B / 375 `{`，
+  sha256 `ce754dfbaa19666b17c97c7b2c86f31fc21b81796eafcae54c7dfbce220d5b65`）
+  ⇒ 宿主 UI 样式层没动，**改动全在 JS 逻辑层**。
+
+### 15.2 插件接口面逐项零变动
+
+`plugin_type` 13/13、`background_css` 2/2、`theme_css` 2/2、`active_background` 2/2、`active_skin` 2/2、
+`load_plugin_background_css` 2/2、`load_plugin_theme_css` 2/2、`set_active_background` 1/1、
+`set_active_skin` 1/1、`openrevo-custom-background` 4/4、`openrevo-theme-skin` 6/6、
+`get_custom_plugins` 2/2、`load_plugin_html` 1/1、`close_custom_widget` 2/2、`resize_window` 5/5、
+`data-background` 3/3、`data-skin` 3/3（格式为「旧 / 新」计数，全部相等）。
+`plugin_type==="…"` 两版都只有 `background|skin|tab|widget`；`data-slot` 的 20 个值两版完全相同；
+插件 tab 的 `postMessage` 契约仍只有 `SET_POWER_MODE` / `SET_FAN_BOOST` / `SET_BATTERY_LIMIT`。
+仍**不存在**：`permissions`、`install_plugin`、`uninstall_plugin`、`remove_plugin`、`reload_plugin`、
+`get_active_theme`、manifest `"type"`。
+
+新增的能力都跟插件无关：3 个 IPC（`get_keyboard_sleep_timeout` / `set_keyboard_sleep_timeout` /
+`get_model_capabilities`）与 20 个**宿主自己订阅**的事件名（`gpu-mode-changed`、`wifi-state-changed`…）。
+⚠️ 这些事件**能否被第三方插件 `listen` 未实测**，不写进结论。
+
+### 15.3 新构建新增 `data-form-factor` + `--debug` 机型形态模拟（对插件无用）
+
+两处根元素新增 `data-form-factor`（`"gaming"` / `"thin_light"`），配套一张 `--debug` 专属卡片
+「机型形态与能力实时预览 (Dev Mode)」（在「真实本机 / 星耀 14 轻薄本 / 标准全能游戏本」间切换，
+纯前端伪造 `capabilities`）。**对插件没有新面**：
+
+* `data-form-factor` 与 `thin_light` 在 CSS 里 **0 引用**，新增的 6 个 `.sys-card*` 类在 CSS 里也 **0 引用**；
+* `data-form-factor` **不挂 `documentElement`**（那里只写 `data-skin` / `data-background` / `data-theme` /
+  `data-window-mode`）⇒ 皮肤侧无需也无法针对它写样式。
+
+### 15.4 反转：`v0.8.8-dbfe615` 的【刷新】会热重载样式
+
+新 handler 逐字（旧版对照见 §14.2 第 6 行）：
+
+```js
+j = async (S = !1) => { b(!0); try { const D = await m("get_custom_plugins") || [];
+  u(D), S && (i && a && (D.some(W => W.id === i) ? a(i) : a(null)),
+              o && d && (D.some(W => W.id === o) ? d(o) : d(null))), p && p()
+} catch (P) { console.error("Failed to load custom plugins:", P) } finally { b(!1) } }
+```
+
+绑 `{onClick:()=>j(!0), title:"刷新已安装插件列表并热重载当前样式"}`。
+⇒ **改 `theme.css` / 装新插件目录都只需点一次【刷新】**，不必拨开关、不必重启。
+本轮据此把 `docs/` 与 `README.md` 里 16 处「【刷新】只重扫列表」的表述全部改写（保留旧构建例外）。
+
+### 15.5 教训
+
+* **明文 grep 的第二次翻车**：直接对 exe grep 命令名会漏（`get_model_capabilities`、
+  `get_keyboard_sleep_timeout` 在 JS 里明明在用，exe 明文却 0 命中），必须抽 JS 再查；
+* **孤立明文串 ≠ 接口**：exe @ 7,124,560 的 `background_image` 夹在 `once_cell` 与
+  `serde_json::private::RawValue` 之间，是 crate 符号残留，**不是 config 键**（带引号 0 命中）；
+* **抽 blob 的正确边界**：用「资产路径表中紧随其后的下一条 `/assets/...`」作为流尾，
+  一次 `brotli.decompress(data[start:next])` 成功；靠遍历 `err_at` 暴扫（4 KiB / 8 KiB 分块）
+  一律 `decoder unhealthy`。
+

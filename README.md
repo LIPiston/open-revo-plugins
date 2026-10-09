@@ -103,7 +103,6 @@ C:\Users\LIPis\AppData\Roaming\OpenRevo\plugins\
   正确流程：提权停宿主 → 改 `active_skin` 为 `skin-win11-dark` → 启宿主。
   宿主只在启动时枚举插件目录，所以**改完必须重启宿主才认新 ID**（0.8.8 起插件列表可点【刷新】重扫，
   但 `active_skin` 指向已删 ID 这种残局仍必须停机改配置 + 重启，见 §11.2、`pitfalls.md` #37）。
-
 ## 3. 本地预览（不装、不改宿主也能看效果）
 
 直接双击打开：
@@ -334,7 +333,7 @@ bash _tools/verify-bg.sh off                              # 停用后的零泄�
 > * `file://` 页面里跨文档样式表的 `cssRules` 会抛 SecurityError（规则数误报 `none`），要加 `--allow-file-access-from-files`。
 > * 别用“数某个灰色的像素个数”判断透明度：文字抗锯齿会撞上背景色，必须用**换底色差分**。
 > * `?bare=1` 里 `.pv-stage` 的内联 `width/height` 必须用 `!important` 覆盖，否则窗口填不满视口，截图底部会留一条页面底色带（曾把这条带误判成“窗口漏色”）。
-> * **宿主只在启动时枚举插件目录**（0.8.7 时如此；0.8.8 起插件页【刷新】可重扫列表）：装完皮肤不重启宿主，跑着的旧进程里根本没有这套皮肤（当时 `pid 13128` 启动于 16:24，
+> * **宿主只在启动时枚举插件目录**（0.8.7 时如此；**0.8.8 起插件页【刷新】可重扫列表，`v0.8.8-dbfe615` 起连样式一起热重载**）：装完皮肤不重启宿主，跑着的旧进程里根本没有这套皮肤（当时 `pid 13128` 启动于 16:24，
 >   而插件文件是 18:30 写的），截图像素自然会误导成“皮肤没生效”。判断真机状态前先比 `_tools\when.ps1`（进程启动时间）
 >   与插件目录 mtime。重启要用提权路径 `_tools\kill-and-start.ps1`（`taskkill` 对这个 requireAdministrator 进程是「拒绝访问」）。
 > * **判读真机截图前必须先确认窗口 z 序与遮挡**：第一次抓到的 615×916 图里左侧 45% 是一条纯 `(34,34,34)` 竖带，
@@ -462,9 +461,11 @@ bash _tools/verify-bg.sh off      # 停用后：产物已删 + 没有背景图�
 ### 11.2 装完要重启（0.8.8 起可免）
 
 0.8.7 时代宿主**只在启动时枚举插件目录**，`--install` 之后必须重启宿主才认。**0.8.8 已改为按需注入**：
-皮肤 / 背景 CSS 都在 `useCallback` 里即时 `load_plugin_*_css`，所以在插件页**拨一次开关**即可生效；
-只改已有 CSS 也是关/开一次开关。注意【刷新】按钮**只重扫插件列表**（`invoke('get_custom_plugins')`），
-不负责重新注入 CSS —— 新装目录的流程是「先【刷新】让列表出现，再拨开关」。
+皮肤 / 背景 CSS 都在 `useCallback` 里即时 `load_plugin_*_css`。**`v0.8.8-dbfe615` 起，插件页【刷新】按钮
+本身就带热重载**（handler 逐字 `onClick:()=>j(!0)`、title `"刷新已安装插件列表并热重载当前样式"`：重扫列表后
+重放 `onApplySkin` / `onApplyBackground`）⇒ **改 `theme.css`、装新插件目录都只需点一次【刷新】**，
+不必拨开关、不必重启。⚠️ 早于该构建（含 0.8.7、`v0.8.8-bf72755`）的【刷新】只重扫列表
+（`invoke('get_custom_plugins')`），那时才需要「先【刷新】让列表出现，再拨开关」。
 
 重启仍是最稳的兜底路径：`powershell -ExecutionPolicy Bypass -File _tools\kill-and-start.ps1`
 （需要提权，`taskkill` 会被拒）。`--activate` 会调 `_tools\set-active-skin.ps1`，它按「停机 → 改 config → 启动」

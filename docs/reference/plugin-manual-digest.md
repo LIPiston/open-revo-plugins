@@ -120,9 +120,13 @@ OpenRevo = **笔记本硬件微内核平台**：Rust Core（Ring0 ACPI、同方/
 **原文承诺的调试流程**：拷进插件目录 → 打开【插件】页 → 点【刷新】→ 拨开关 → CSS 热注入 + 视窗尺寸平滑拉伸到 `window` 声明值并居中。
 
 > 发行版实际行为有几处不同（令牌名、示例类名、热加载口径）—— 见 §10 与 `skin-authoring.md`。
-> **0.8.8 更新**：原文承诺的「拷进目录 → 点【刷新】→ 拨开关」流程**基本成立**了 —— CSS 已改为按需注入
-> （`useCallback` 内 `load_plugin_theme_css` / `load_plugin_background_css`），拨开关即重新注入；
-> 只是【刷新】按钮本身**只重扫插件列表**，不负责重新注入 CSS。见 `plugin-dev-0.8.8-skill.md` §4。
+> **0.8.8 更新**：原文承诺的「拷进目录 → 点【刷新】→ 拨开关」流程**成立**，且比原文更省事 ——
+> **`v0.8.8-dbfe615` 起点一次【刷新】即可**：按钮 handler 收一个「是否热重载」参数（逐字
+> `onClick:()=>j(!0)`、title `"刷新已安装插件列表并热重载当前样式"`），重扫列表后会拿当前
+> `activeSkin` / `activeBackground` 重跑注入回调 ⇒ 重新 `load_plugin_theme_css` /
+> `load_plugin_background_css` 并刷新 `<style>.textContent`。CSS 同样改为按需注入（`useCallback` 内）。
+> **早于该构建**（含 0.8.7、`v0.8.8-bf72755`）的【刷新】只重扫插件列表、不重注入，那时才需要
+> 「拨开关」或重启。见 `plugin-dev-0.8.8-skill.md` §4 与 §9。
 
 ## 9. Design Tokens 与安全模式（原文 §8 / §9）
 
@@ -138,7 +142,7 @@ OpenRevo = **笔记本硬件微内核平台**：Rust Core（Ring0 ACPI、同方/
 | 1 | 皮肤 CSS 用 `.overview-main-grid` / `.sensor-gauge-cluster` / `.cooling-fan-card` / `.power-mode-selector` 重排插槽（§7） | **这些类名在发行版里根本不存在**（WebView2 V8 代码缓存逐字检索命中 0），只能写前向兼容层 | `host-truth-extraction.md` §2、`devlog.md` §1 |
 | 2 | 复用 `--core-accent` / `--surface-*` / `--status-*` / `--radius-md` 等令牌（§7 §8） | **⚠️ 已反转**：`--surface-*` / `--status-*` / `--radius-*` / `--text-*` / `--color-*` **就是宿主真值**（0.8.7/0.8.8 两份 `:root` 都在），只有 `--core-*` 与 `--mica-*` 全不存在；`--wf-*` 是**本工具链私有前缀**、不是宿主令牌 | `plugin-dev-0.8.8-skill.md` §5.2、`host-truth-extraction.md` §5；计数：`--surface-card` 7/8、`--status-ok` 2/2、`--core-` 0/0、`--wf-` 0/0 |
 | 3 | 各示例写 `"type": "widget"`（§7 用例 1/3/5） | 权威键是 **`plugin_type`**（`"type"` 带引号在 exe **0 命中**）；新 Skill §3 称二者「完全等价（Rust 配了 alias）」**未证实** → 本项目继续**双发对冲** | exe manifest 字段表 @6949111 只有 `plugin_type`；`plugin-dev-0.8.8-skill.md` §6 |
-| 4 | 插件页点【刷新】拨开关即热加载（§7 步骤 5） | ⚠️ **半对**：0.8.8 写 / 背景 CSS 是 `useCallback` 里**按需** `load_plugin_*_css` 注入（**不再只能靠重启**）；但【刷新】按钮确实**只重扫插件列表**（`invoke('get_custom_plugins')`），不重新注入 CSS。实操 = **新装目录：刷新列表 + 拨一次开关；只改已有 CSS：关/开一次开关** | `plugin-dev-0.8.8-skill.md` §4 |
+| 4 | 插件页点【刷新】拨开关即热加载（§7 步骤 5） | ✅ **成立**（`v0.8.8-dbfe615` 起，比原文更省事）：【刷新】= 重扫列表 **+ 热重载当前样式**（重放 `onApplySkin`/`onApplyBackground` → 重新 `load_plugin_*_css` 并刷新 `<style>.textContent`），**点一次刷新即可，不必拨开关、不必重启**。CSS 也是按需注入（`useCallback` 内）。⚠️ 旧构建 `v0.8.8-bf72755` 及 0.8.7 的【刷新】**只重扫列表**，那时才需要「刷新 + 拨开关」 | `plugin-dev-0.8.8-skill.md` §4、§9.4 |
 | 5 | `data-skin` 挂「宿主根容器」（§7） | **0.8.7**：只挂容器（主控台主容器 / 迷你面板根），`body` 上**没有** → 需要 `body:has([data-skin=…])` 兜底手臂才覆盖得到 body 级浮层；**0.8.8**：**同时**挂到 `document.documentElement`（`C?P.setAttribute("data-skin",C):P.removeAttribute("data-skin")`），本仓库皮肤的 `html[data-skin]` / `body[data-skin]` 手臂正好命中 | `host-truth-extraction.md` §4、`plugin-dev-0.8.8-skill.md` §5.3、`SKILL.md` 硬约束 3 |
 | 6 | 切皮肤时宿主自动按 `window` 平滑改主窗几何并居中（§7） | 主窗几何由宿主自己管（含被停车到 `(-32000,-32000)` 收成 237×39 的状态），皮肤侧只声明 `window.width/height` | `real-machine-verification.md` §3/§5 |
 | 7 | `custom_plugin_toggles` 改 `false` 即跳过插件（§9） | ✅ 成立（本机实测该键存在） | `config.json` 实读 |

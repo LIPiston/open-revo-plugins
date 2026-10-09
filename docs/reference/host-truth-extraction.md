@@ -7,18 +7,30 @@
 宿主是 Tauri 应用，前端产物被**内联进 exe**，格式是拼接的 `[文件路径字符串][brotli 负载]` 序列：
 
 * 格式：`[资产路径字符串][brotli 负载]` 依次拼接；负载**紧跟在路径字符串之后**（`payload = path_offset + len(path)`）。
-* **0.8.8 本次实测**（exe **8,565,760 B**）：
-  `/assets/index-D5aBypuh.css` → 路径 @ **7,348,018**、负载 @ **7,348,044** → 解压 **55,011 B / 375 个 `{`**（sha256 `ce754dfbaa19666b…`）；
-  `/assets/index-Tu8RPoda.js` → 路径 @ **7,004,288**、负载 @ **7,004,313** → 解压 **598,008 B / 7,360 个 `{`**（sha256 `d5f7592e5a126905…`）。
-  解压时增量解码器的 `err_at` 分别是 **8192**（CSS）与 **131,072**（JS）—— 只作定位提示。
+* **0.8.8 最新构建实测**（exe **8,826,368 B**，构建号 **`v0.8.8-dbfe615`**）：
+  `/assets/index-D5aBypuh.css` → 路径 @ **7,382,751**、负载 @ **7,382,777** → 压缩流 8,772 B → 解压 **55,011 B / 375 个 `{`**
+  （sha256 `ce754dfbaa19666b17c97c7b2c86f31fc21b81796eafcae54c7dfbce220d5b65`，**与上一构建逐字节相同** ⇒ UI 样式层未变）；
+  `/assets/index-D-GAymO3.js` → 路径 @ **7,246,680**、负载 @ **7,246,705** → 压缩流 136,046 B → 解压 **607,244 B / 7,461 个 `{`**
+  （sha256 `cc714e5d8b02d7b9961cd878004447873a4bba9bb6c2255338cc2331ffdb8ff2`）。
+  同表后续条目：`/assets/logo-BmAeRQ1x.png` @ **7,391,549**、`/assets/alipay-CR2EmPpy.jpg` @ **7,425,983**、
+  `/assets/wechat-CQ1ljkRz.jpg` @ **7,522,135**。
   ⇒ **blob 表里的路径带 `/assets/` 前缀**（要搜的是 `/assets/index-…`，不是 `index-…`）。
   产物落在 `_extracted\new-build\`。
+* **⚠️ 同一个「版本号」内部可以有多个构建，且行为会变**：本条的上一版是 exe **8,565,760 B**、
+  构建号 `v0.8.8-bf72755`（`index-Tu8RPoda.js` 598,008 B）；而两版 `VersionInfo` 的
+  `FileVersion` / `ProductVersion` **都报 `0.8.8`**。**判宿主是否更新必须看构建号**
+  （前端徽标 `PRO v0.8.8-<hash>`，点标题栏即复制）或 exe 体积 + 资产文件名，不要信版本资源。
+* **0.8.8 上一构建历史记录**（当时 exe 8,565,760 B / `v0.8.8-bf72755`）：
+  `/assets/index-D5aBypuh.css` → 路径 @ **7,348,018**、负载 @ **7,348,044** → 解压 **55,011 B / 375 个 `{`**；
+  `/assets/index-Tu8RPoda.js` → 路径 @ **7,004,288**、负载 @ **7,004,313** → 解压 **598,008 B / 7,360 个 `{`**。
 * **0.8.7 历史记录**（当时 exe 8,496,640 B）：`assets/index-C535NsqC.css` → 路径 @ **6941209**、负载 @ **6941234**、压缩流 8,020 B → 解压 **50,997 B**；
   `assets/index-BzQyTcpV.js` → 路径 @ **7124459**、负载 @ **7124483**、压缩流 133,369 B → 解压 **594,906 B**。
   （**这些数字随版本变动，只当定位方法的示例，绝不要写死进代码。**）
 * 解压后（0.8.8）：完整宿主 CSS **55,011 B / 375 个 `{`**；外壳/主题子集另存 `_extracted\host-shell.css`
   （14,584 B / 86 行：`acrylic-container|mech-titlebar|sub-nav|nav-tab|glass-card|logo-badge|mini-drawer-root`，取自 0.8.7，未重抽）。
-* JS：0.8.8 完整抽取物 `_extracted\new-build\index-Tu8RPoda.js`（598,008 B）；0.8.7 那份 `_extracted\new-build\index-BzQyTcpV.js`
+* JS：0.8.8 最新构建抽取物 `_extracted\new-build\index-D-GAymO3.js`（607,244 B / `v0.8.8-dbfe615`）；
+  上一构建 `index-Tu8RPoda.js`（598,008 B / `bf72755`）；
+  0.8.7 那份 `_extracted\new-build\index-BzQyTcpV.js`
   （594,906 B）保留作回归对照；早期 `_extracted\bundle.partial.js`（584,148 B / 1012 行，**尾部被截断**）是最旧的构建，
   但它**没有背景通道**（`openrevo-custom-background` / `set_active_background` / `plugin_type==="background"` 全 0 命中），
   可用来判「某能力是哪版引入的」。迷你面板的决定性片段另有逐字切片
@@ -129,6 +141,18 @@ u = v.useCallback(async P => {
 所以皮肤 / 背景必须**自带完整观感**（包括命名空间内的全部默认值），不能依赖「上一次注入的残留」。
 另外 **CSS 是「按需注入」而不是「只启动时注入一次」**：切开关会重新 `load_plugin_*_css`
 （0.8.7 时代必须重启宿主，这个结论在 0.8.8 已过时）。
+
+**【刷新】按钮的语义随构建变**（判构建看徽标 `PRO v0.8.8-<hash>`）：
+
+| 构建 | 【刷新】行为 | 实操口径 |
+|---|---|---|
+| 0.8.7 | 无（只在启动时枚举一次） | 必须重启宿主 |
+| `v0.8.8-bf72755` | 只 `get_custom_plugins` 重扫列表 | 刷新列表 + 拨一次开关 |
+| **`v0.8.8-dbfe615` 及之后** | 重扫列表 **+ 热重载当前样式**（`onClick:()=>j(!0)` 触发重放 `onApplySkin` / `onApplyBackground`） | **点一次【刷新】即可** |
+
+最新构建的 handler 逐字：`j=async(S=!1)=>{b(!0);try{const D=await m("get_custom_plugins")||[];u(D),S&&(i&&a&&(D.some(W=>W.id===i)?a(i):a(null)),o&&d&&(D.some(W=>W.id===o)?d(o):d(null))),p&&p()}…}`，
+title `"刷新已安装插件列表并热重载当前样式"`；旧构建的 `k=async()=>{…d(j||[])}` **没有** `S` 形参与回调重放。
+详见 `plugin-dev-0.8.8-skill.md` §4 与 §9.4。
 
 要点：
 
